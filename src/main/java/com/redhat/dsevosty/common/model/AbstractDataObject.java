@@ -16,7 +16,11 @@ public interface AbstractDataObject extends Serializable {
     public UUID getId();
     public JsonObject toJson();
 
-    default String toStringAbstract() {
+    public default UUID defaultId() {
+        return UUID.randomUUID();
+    }
+
+    public default String toStringAbstract() {
         StringBuffer sb = new StringBuffer();
         Class<?> clazz = getClass();
         Method[] methods = clazz.getDeclaredMethods();
@@ -50,13 +54,11 @@ public interface AbstractDataObject extends Serializable {
             } else {
                 sb.append(value);
             }
-
             sb.append(", ");
         }
         if (methodList.size() > 0) {
             sb.deleteCharAt(sb.length() - 2);
         }
-
         return sb.append("} ]").toString();
     }
 }

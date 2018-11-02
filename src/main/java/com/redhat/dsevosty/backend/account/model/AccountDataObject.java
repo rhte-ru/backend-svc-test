@@ -13,6 +13,7 @@ public class AccountDataObject implements AbstractDataObject {
     private static final long serialVersionUID = AccountDataObject.class.hashCode();
 
     private UUID id;
+    private String number;
     private String currencyISO4217;
     private boolean credit;
     private BigDecimal amount;
@@ -21,21 +22,24 @@ public class AccountDataObject implements AbstractDataObject {
     public AccountDataObject() {
         this.id = defaultId();
         currencyISO4217 = "RUB";
+        number = "ААААА-BBB-C-DDDD-EEEEEEE";
         credit = false;
-        amount = new BigDecimal(0);
+        amount = new BigDecimal("0.00");
         metaId = null;
     }
 
     public AccountDataObject(AccountDataObject other) {
         this.id = other.id;
+        this.number = other.number;
         this.currencyISO4217 = other.currencyISO4217;
         this.credit = other.credit;
         this.amount = other.amount;
         this.metaId = other.metaId;
     }
 
-    public AccountDataObject(UUID id, String currencyISO4217, boolean credit, BigDecimal amount, UUID metaId) {
+    public AccountDataObject(UUID id, String number, String currencyISO4217, boolean credit, BigDecimal amount, UUID metaId) {
         this.id = id;
+        this.number = number;
         this.currencyISO4217 = currencyISO4217;
         this.credit = credit;
         this.amount = amount;
@@ -47,6 +51,10 @@ public class AccountDataObject implements AbstractDataObject {
         val = json.getString("id");
         if (val != null) {
             id = UUID.fromString(val);
+        }
+        val = json.getString("number");
+        if (val != null) {
+            number = val;
         }
         val = json.getString("currencyISO4217");
         if (val != null) {
@@ -66,10 +74,6 @@ public class AccountDataObject implements AbstractDataObject {
         }
     }
 
-    public static UUID defaultId() {
-        return UUID.randomUUID();
-    }
-
     @Override
     public UUID getId() {
         if (id == null) {
@@ -80,6 +84,14 @@ public class AccountDataObject implements AbstractDataObject {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public String getNumber() {
+        return number;
+    }
+
+    public void setNumber(String number) {
+        this.number = number;
     }
 
     public String getCurrencyISO4217() {
