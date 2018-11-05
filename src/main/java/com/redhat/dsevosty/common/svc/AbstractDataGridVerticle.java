@@ -329,7 +329,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
 
     protected abstract AbstractDataObject dataObjectFromJson(JsonObject json);
 
-    protected abstract void registerRestApi();
+    // protected abstract void registerRestApi();
 
     // Management methods
     @Override
