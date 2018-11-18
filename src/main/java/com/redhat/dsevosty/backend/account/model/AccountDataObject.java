@@ -140,7 +140,7 @@ public class AccountDataObject implements AbstractDataObject {
     }
 
     public String toString() {
-        return toStringAbstract();
+        return toString();
     }
 
     @Override
