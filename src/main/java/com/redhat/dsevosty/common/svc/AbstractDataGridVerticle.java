@@ -1,5 +1,7 @@
 package com.redhat.dsevosty.common.svc;
 
+import static com.redhat.dsevosty.common.ServiceConstant.*;
+
 import java.lang.management.ManagementFactory;
 import java.util.HashSet;
 import java.util.Set;
@@ -12,8 +14,8 @@ import javax.management.MalformedObjectNameException;
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 
-import com.redhat.dsevosty.common.ServiceConstant;
 import com.redhat.dsevosty.common.model.AbstractDataObject;
+import com.redhat.dsevosty.common.model.Versionable;
 
 import org.infinispan.client.hotrod.RemoteCache;
 import org.infinispan.client.hotrod.RemoteCacheManager;
@@ -121,7 +123,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
 
     protected void registerManagementRestApi() {
         // https://www.devcon5.ch/en/blog/2017/09/15/vertx-modular-router-design/
-        throw new UnsupportedOperationException("Method is not implemented yet");
+        // throw new UnsupportedOperationException("Method is not implemented yet");
     }
 
     protected EventBus getEventBus() {
@@ -144,7 +146,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     }
 
     protected void registerEventBusHadler() {
-        LOGGER.trace("About to register EventBusHadler for address{}", eventBusAddress);
+        LOGGER.trace("About to register EventBusHadler for address {}", eventBusAddress);
         getEventBus().consumer(eventBusAddress, this::defaultEventBusHandler).completionHandler(result -> {
             if (result.succeeded()) {
                 LOGGER.info("EventBusHadler registered for address={}", eventBusAddress);
@@ -187,17 +189,14 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     protected void initConfiguration() {
         JsonObject vertxConfig = config();
         LOGGER.debug("Vert.x config: {}", vertxConfig);
-        hotrodServerHost = vertxConfig.getString(ServiceConstant.SERVICE_JDG_REMOTE_ADDRESS.key,
-                ServiceConstant.SERVICE_JDG_REMOTE_ADDRESS.value);
-        hotrodServerPort = vertxConfig.getInteger(ServiceConstant.SERVICE_JDG_REMOTE_PORT.key,
-                Integer.valueOf(ServiceConstant.SERVICE_JDG_REMOTE_PORT.value));
-        httpServerHost = vertxConfig.getString(ServiceConstant.SERVICE_HTTP_LISTEN_ADDRESS.key,
-                ServiceConstant.SERVICE_HTTP_LISTEN_ADDRESS.value);
-        httpServerPort = vertxConfig.getInteger(ServiceConstant.SERVICE_HTTP_LISTEN_PORT.key,
-                Integer.valueOf(ServiceConstant.SERVICE_HTTP_LISTEN_PORT.value));
-        serviceContextName = vertxConfig.getString(ServiceConstant.SERVICE_NAMESPACE.key, "");
-        eventBusAddress = vertxConfig.getString(ServiceConstant.SERVICE_EVENTBUS_PREFIX.key,
-                ServiceConstant.SERVICE_EVENTBUS_PREFIX.value);
+        hotrodServerHost = vertxConfig.getString(SERVICE_JDG_REMOTE_ADDRESS.key, SERVICE_JDG_REMOTE_ADDRESS.value);
+        hotrodServerPort = Integer
+                .valueOf(vertxConfig.getString(SERVICE_JDG_REMOTE_PORT.key, SERVICE_JDG_REMOTE_PORT.value));
+        httpServerHost = vertxConfig.getString(SERVICE_HTTP_LISTEN_ADDRESS.key, SERVICE_HTTP_LISTEN_ADDRESS.value);
+        httpServerPort = Integer
+                .valueOf(vertxConfig.getString(SERVICE_HTTP_LISTEN_PORT.key, SERVICE_HTTP_LISTEN_PORT.value));
+        serviceContextName = vertxConfig.getString(SERVICE_NAMESPACE.key, "");
+        eventBusAddress = vertxConfig.getString(SERVICE_EVENTBUS_PREFIX.key, SERVICE_EVENTBUS_PREFIX.value);
         if (serviceContextName.equals("") == false) {
             eventBusAddress += "." + serviceContextName;
         }
@@ -216,11 +215,12 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     }
 
     protected void defaultEventBusHandler(Message<JsonObject> message) {
+        LOGGER.trace("Rise defaultEventBusHandler for message {}", message);
         MultiMap headers = message.headers();
-        String operation = headers.get(ServiceConstant.SERVICE_OPERATION.key);
+        String operation = headers.get(SERVICE_OPERATION.key);
         if (operation == null) {
             replyError(message, new UnsupportedOperationException(
-                    "Operation must be set at message header " + ServiceConstant.SERVICE_OPERATION.key));
+                    "Operation must be set at message header " + SERVICE_OPERATION.key));
             return;
         }
         if (operation.equalsIgnoreCase("add")) {
@@ -245,9 +245,29 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     protected void defaultAddDataObject(Message<JsonObject> message) {
         JsonObject o = message.body();
         LOGGER.debug("Requesting to PUT into Cache for o={}...", o);
+
         AbstractDataObject ado = dataObjectFromJson(o);
+
+        if (ado instanceof Versionable) {
+            Versionable v = (Versionable) ado;
+            if (v.isVersionSet()) {
+                replyError(message, new UnsupportedOperationException("Version of " + Versionable.class.getName()
+                        + " must not be set, but got: " + v.versionAsString()));
+            }
+            v.setVersion();
+        }
+
         final UUID id = ado.getId();
-        getCache().putAsync(id, ado).whenComplete((result, t) -> {
+
+        RemoteCache<UUID, AbstractDataObject> c = getCache();
+
+        if (c.containsKey(id)) {
+            replyError(message,
+                    new IllegalArgumentException("Key '" + id + "' already exists in cache " + c.getName()));
+            return;
+        }
+
+        c.putAsync(id, ado).whenComplete((result, t) -> {
             LOGGER.debug("Cache PUT for id={}  completed with result: {}", id, t);
             if (t != null) {
                 replyError(message, t);
@@ -255,8 +275,8 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
             }
             JsonObject reply = new JsonObject();
             reply.put("statusCode", HttpResponseStatus.CREATED.code());
-            reply.put("result", cache.get(id).toJson().encode());
-            LOGGER.debug("Reply to publisher with {}", reply);
+            reply.put("result", c.get(id).toJson().encode());
+            LOGGER.debug("Reply to publisher with {}", reply.encode());
             message.reply(reply);
         });
     }
@@ -264,7 +284,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     protected void defaultGetDataObject(Message<JsonObject> message) {
         final UUID id = UUID.fromString(message.body().getString(HTTP_GET_PARAMETER_ID));
         LOGGER.debug("Requesting to GET Cache for id={}...", id);
-        cache.getAsync(id).whenComplete((result, t) -> {
+        getCache().getAsync(id).whenComplete((result, t) -> {
             if (t != null) {
                 replyError(message, t);
                 return;
@@ -285,11 +305,49 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     }
 
     protected void defaultUpdateDataObject(Message<JsonObject> message) {
-        JsonObject o = message.body();
-        final UUID id = UUID.fromString(o.getString(HTTP_GET_PARAMETER_ID));
-        LOGGER.debug("Requesting to UPDATE Cache for id={} for object {}...", id, o);
-        AbstractDataObject ado = dataObjectFromJson(o);
-        cache.replaceAsync(id, ado).whenComplete((result, t) -> {
+        JsonObject json = message.body();
+        final UUID id = UUID.fromString(json.getString(HTTP_GET_PARAMETER_ID));
+        LOGGER.debug("Requesting to UPDATE Cache for id={} for object {}...", id, json);
+
+        AbstractDataObject ado = dataObjectFromJson(json);
+        if (ado instanceof Versionable) {
+            Versionable _new = (Versionable) ado;
+            getCache().getAsync(id).whenComplete((result, t) -> {
+                if (result instanceof Versionable) {
+                    Versionable _old = (Versionable) result;
+                    if (_old.isVersionEqual(_new) == false) {
+                        replyError(message,
+                                new IllegalArgumentException("Update object " + result + " with wrong versin " + ado));
+                        return;
+                    } else {
+                        // real update
+                        realDefaultUpdateDataObject(message, ado, true);
+                    }
+                } else {
+                    replyError(message, new IllegalArgumentException(
+                            "Trying to update non-versionable DataObject" + result + " with versionrd " + _new));
+                    return;
+                }
+            });
+        } else {
+            // Non-versionable
+            realDefaultUpdateDataObject(message, ado, false);
+        }
+    }
+
+    protected void realDefaultUpdateDataObject(Message<JsonObject> message, AbstractDataObject _new,
+            boolean versioned) {
+        final UUID id = _new.getId();
+        AbstractDataObject ado;
+        if (versioned) {
+            JsonObject json = _new.toJson();
+            json.put("version", ((Versionable) _new).versionAsString());
+            ado = dataObjectFromJson(json);
+        } else {
+            ado = _new;
+        }
+
+        getCache().replaceAsync(id, ado).whenComplete((result, t) -> {
             LOGGER.info("Cache REPLACE for id={} completed with result: {}", id, result);
             if (t != null) {
                 replyError(message, t);
@@ -297,7 +355,8 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
             }
             JsonObject reply = new JsonObject();
             reply.put("statusCode", HttpResponseStatus.OK.code());
-            reply.put("result", cache.get(id).toJson().encode());
+            // reply.put("result", getCache().get(id).toJson().encode());
+            reply.put("result", result.toJson().encode());
             LOGGER.debug("Reply to publisher with {}", reply);
             message.reply(reply);
         });
@@ -306,7 +365,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     protected void defaultRemoveDataObject(Message<JsonObject> message) {
         final UUID id = UUID.fromString(message.body().getString(HTTP_GET_PARAMETER_ID));
         LOGGER.debug("Requesting (HTTP/DELEETE) Cache for id={} for object {}...", id);
-        cache.removeAsync(id).whenCompleteAsync((result, t) -> {
+        getCache().removeAsync(id).whenCompleteAsync((result, t) -> {
             LOGGER.info("Cache DELETE for id={} completed with result: {}", id, result);
             if (t != null) {
                 replyError(message, t);
@@ -337,17 +396,19 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
         return serviceContextName + "/" + getClass().getName();
     }
 
-    protected String getPackageName() {
-        // must be replaced with maven archetype generator with $package macro
-        // return "${package}";
-        throw new UnsupportedOperationException("Method mustbe overrriden in subclass");
-    }
+    // must be replaced with maven archetype generator with $package macro
+    // return "${package}";
+    protected abstract String getPackageName();
+    // throw new UnsupportedOperationException("Method mustbe overriden in
+    // subclass");
+    // }
 
-    protected String getType() {
-        // must be replaced with maven archetype generator with $package macro
-        // return "type=${artefectId}";
-        throw new UnsupportedOperationException("Method mustbe overrriden in subclass");
-    }
+    // must be replaced with maven archetype generator with $package macro
+    // return "type=${artefectId}";
+    protected abstract String getType();
+    // throw new UnsupportedOperationException("Method mustbe overrriden in
+    // subclass");
+    // }
 
     protected void registerMBean() {
         vertx.executeBlocking(future -> {

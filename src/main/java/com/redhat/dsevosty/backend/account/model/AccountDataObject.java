@@ -5,10 +5,11 @@ import java.util.Objects;
 import java.util.UUID;
 
 import com.redhat.dsevosty.common.model.AbstractDataObject;
+import com.redhat.dsevosty.common.model.Versionable;
 
 import io.vertx.core.json.JsonObject;
 
-public class AccountDataObject implements AbstractDataObject {
+public class AccountDataObject implements AbstractDataObject, Versionable {
 
     private static final long serialVersionUID = AccountDataObject.class.hashCode();
 
@@ -18,6 +19,7 @@ public class AccountDataObject implements AbstractDataObject {
     private boolean credit;
     private BigDecimal amount;
     private UUID metaId;
+    private UUID version;
 
     public AccountDataObject() {
         this.id = defaultId();
@@ -26,6 +28,7 @@ public class AccountDataObject implements AbstractDataObject {
         credit = false;
         amount = new BigDecimal("0.00");
         metaId = null;
+        this.version = null;
     }
 
     public AccountDataObject(AccountDataObject other) {
@@ -35,6 +38,7 @@ public class AccountDataObject implements AbstractDataObject {
         this.credit = other.credit;
         this.amount = other.amount;
         this.metaId = other.metaId;
+        this.version = null;
     }
 
     public AccountDataObject(UUID id, String number, String currencyISO4217, boolean credit, BigDecimal amount, UUID metaId) {
@@ -44,6 +48,7 @@ public class AccountDataObject implements AbstractDataObject {
         this.credit = credit;
         this.amount = amount;
         this.metaId = metaId;
+        this.version = null;
     }
 
     public AccountDataObject(JsonObject json) {
@@ -60,10 +65,7 @@ public class AccountDataObject implements AbstractDataObject {
         if (val != null) {
             currencyISO4217 = val;
         }
-        val = json.getString("credit");
-        if (val != null) {
-            credit = Boolean.getBoolean(val);
-        }
+        credit = Boolean.getBoolean(val);
         val = json.getString("amount");
         if (val != null) {
             amount = new BigDecimal(val);
@@ -71,6 +73,10 @@ public class AccountDataObject implements AbstractDataObject {
         val = json.getString("metaId");
         if (val != null) {
             metaId = UUID.fromString(val);
+        }
+        val = json.getString("version");
+        if (val != null) {
+            version = UUID.fromString(val);
         }
     }
 
@@ -113,7 +119,7 @@ public class AccountDataObject implements AbstractDataObject {
     public BigDecimal getAmount() {
         return amount;
     }
-    
+
     public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
@@ -136,11 +142,14 @@ public class AccountDataObject implements AbstractDataObject {
         if (metaId != null) {
             json.put("metaId", metaId.toString());
         }
+        if (version != null) {
+            json.put("version", versionAsString());
+        }
         return json;
     }
 
     public String toString() {
-        return toString();
+        return toStringAbstract();
     }
 
     @Override
@@ -161,5 +170,33 @@ public class AccountDataObject implements AbstractDataObject {
         }
         AccountDataObject other = (AccountDataObject) o;
         return Objects.equals(getId(), other.getId());
+    }
+
+    @Override
+    public boolean isVersionEqual(Versionable other) {
+        if (version == null) {
+            return false;
+        }
+        return versionAsString().equals(other.versionAsString());
+    }
+
+    @Override
+    public boolean isVersionSet() {
+        return version != null;
+    }
+
+    @Override
+    public synchronized void setVersion() {
+        if (version != null) {
+            version = defaultId();
+        }
+    }
+
+    @Override
+    public String versionAsString() {
+        if (version == null) {
+            return "";
+        }
+        return version.toString();
     }
 }
