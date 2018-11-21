@@ -7,6 +7,7 @@ import com.redhat.dsevosty.common.model.AbstractDataObject;
 // import com.redhat.dsevosty.common.model.Money;
 import com.redhat.dsevosty.common.svc.AbstractDataGridVerticle;
 
+import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonObject;
 
 public class AccountDataGridVerticle extends AbstractDataGridVerticle {
@@ -30,5 +31,9 @@ public class AccountDataGridVerticle extends AbstractDataGridVerticle {
   @Override
   protected String getType() {
     return ARTIFACT_ID;
+  }
+
+  @Override
+  protected void customEventBusHandler(Message<JsonObject> message, String operation) {
   }
 }

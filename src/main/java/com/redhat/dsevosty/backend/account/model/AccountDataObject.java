@@ -41,7 +41,8 @@ public class AccountDataObject implements AbstractDataObject, Versionable {
         this.version = null;
     }
 
-    public AccountDataObject(UUID id, String number, String currencyISO4217, boolean credit, BigDecimal amount, UUID metaId) {
+    public AccountDataObject(UUID id, String number, String currencyISO4217, boolean credit, BigDecimal amount,
+            UUID metaId) {
         this.id = id;
         this.number = number;
         this.currencyISO4217 = currencyISO4217;
@@ -136,6 +137,7 @@ public class AccountDataObject implements AbstractDataObject, Versionable {
     public JsonObject toJson() {
         JsonObject json = new JsonObject();
         json.put("id", id.toString());
+        json.put("number", number);
         json.put("currencyISO4217", currencyISO4217);
         json.put("credit", credit);
         json.put("amount", amount.toString());
@@ -169,15 +171,27 @@ public class AccountDataObject implements AbstractDataObject, Versionable {
             return false;
         }
         AccountDataObject other = (AccountDataObject) o;
-        return Objects.equals(getId(), other.getId());
+        return Objects.equals(getId(), other.getId()) && Objects.equals(getAmount(), other.getAmount())
+                && Objects.equals(getCurrencyISO4217(), other.getCurrencyISO4217())
+                && Objects.equals(getNumber(), other.getNumber());
+    }
+
+    public boolean exactlyEquals(Object o) {
+        return this.equals(o) && isVersionEqual(o);
     }
 
     @Override
-    public boolean isVersionEqual(Versionable other) {
+    public boolean isVersionEqual(Object other) {
         if (version == null) {
             return false;
         }
-        return versionAsString().equals(other.versionAsString());
+        if (other == null) {
+            return false;
+        }
+        if (!(other instanceof Versionable)) {
+            return false;
+        }
+        return versionAsString().equals(((Versionable)other).versionAsString());
     }
 
     @Override
@@ -187,7 +201,7 @@ public class AccountDataObject implements AbstractDataObject, Versionable {
 
     @Override
     public synchronized void setVersion() {
-        if (version != null) {
+        if (version == null) {
             version = defaultId();
         }
     }
@@ -199,4 +213,8 @@ public class AccountDataObject implements AbstractDataObject, Versionable {
         }
         return version.toString();
     }
+
+    // protected synchronized void setVersion(UUID version) {
+    //     this.version = version;
+    // }
 }
