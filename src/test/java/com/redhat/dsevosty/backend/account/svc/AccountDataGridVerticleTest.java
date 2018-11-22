@@ -1,6 +1,7 @@
 package com.redhat.dsevosty.backend.account.svc;
 
 import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_EVENTBUS_PREFIX;
+import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_HTTP_LISTEN_ADDRESS;
 import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_HTTP_LISTEN_PORT;
 import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_JDG_REMOTE_ADDRESS;
 import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_JDG_REMOTE_PORT;
@@ -32,6 +33,7 @@ import io.vertx.core.AsyncResult;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
@@ -39,6 +41,8 @@ import io.vertx.core.eventbus.ReplyException;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.ext.web.client.HttpResponse;
+import io.vertx.ext.web.client.WebClient;
 import io.vertx.junit5.Checkpoint;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -47,7 +51,7 @@ import io.vertx.junit5.VertxTestContext;
 public class AccountDataGridVerticleTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(AccountDataGridVerticleTest.class);
     private static final String PUBLIC_CONTEXT_NAME = "account";
-    private static final int DEFAULT_DELAY = 3;
+    private static final int DEFAULT_DELAY = 2;
 
     private static InfinispanLocalHotrodServer<UUID, AbstractDataObject> server;
 
@@ -58,6 +62,7 @@ public class AccountDataGridVerticleTest {
     private AccountDataObject createdForUpdate = null;
 
     private static final AccountDataObject ADO = new AccountDataObject();
+    private static int httpPort = 0;
 
     @BeforeAll
     public static void setUp(Vertx vertx, VertxTestContext context) throws InterruptedException {
@@ -73,7 +78,6 @@ public class AccountDataGridVerticleTest {
         vertxConfig.put(SERVICE_JDG_REMOTE_ADDRESS.key, SERVICE_JDG_REMOTE_ADDRESS.value);
         vertxConfig.put(SERVICE_JDG_REMOTE_PORT.key, SERVICE_JDG_REMOTE_PORT.value);
         vertxConfig.put(SERVICE_NAMESPACE.key, PUBLIC_CONTEXT_NAME);
-        int httpPort;
         try {
             ServerSocket socket = new ServerSocket(0);
             httpPort = socket.getLocalPort();
@@ -337,8 +341,48 @@ public class AccountDataGridVerticleTest {
         context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
 
+    protected void httpResponseHandler(AsyncResult<HttpResponse<Buffer>> result, VertxTestContext context, Handler<Buffer> bodyHandler) {
+        if (result.succeeded()) {
+            try {
+                final HttpResponse<Buffer> response = result.result();
+                assertThat(response.statusCode()).isEqualTo(HttpResponseStatus.OK.code());
+                final Buffer body = response.body();
+                LOGGER.debug("GOT body:\n{}", body);
+                if (bodyHandler != null) {
+                    bodyHandler.handle(body);
+                    context.completeNow();
+                }
+            } catch (Throwable t) {
+                context.failNow(t);
+            }
+        } else {
+            LOGGER.error("Error occured while asking http://{}:{}", result.cause(), SERVICE_HTTP_LISTEN_ADDRESS.value, httpPort);
+            context.failNow(result.cause());
+        }
+    }
+
     @Test
     public void testRestApiOnRoot(Vertx vertx, VertxTestContext context) throws InterruptedException {
-        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.MINUTES);
+        WebClient web = WebClient.create(vertx);
+        web.get(httpPort, SERVICE_HTTP_LISTEN_ADDRESS.value, "/").send(response -> {
+            httpResponseHandler(response, context, body -> {
+                assertThat(body.toString()).contains("<title>Endpoints</title>");
+            });
+        });
+        web.close();
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
+
+    @Test
+    public void testINfoHandler(Vertx vertx, VertxTestContext context) throws InterruptedException {
+        WebClient web = WebClient.create(vertx);
+        web.get(httpPort, SERVICE_HTTP_LISTEN_ADDRESS.value, "/account/info").send(response -> {
+            httpResponseHandler(response, context, body -> {
+                assertThat(body.toString()).contains("<title>Info</title>");
+            });
+        });
+        web.close();
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
+    }
+
 }

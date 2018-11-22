@@ -3,6 +3,7 @@ package com.redhat.dsevosty.common.svc;
 import static com.redhat.dsevosty.common.ServiceConstant.*;
 
 import java.lang.management.ManagementFactory;
+import java.rmi.UnexpectedException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -25,6 +26,7 @@ import org.infinispan.client.hotrod.configuration.ConfigurationBuilder;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.eventbus.EventBus;
@@ -64,7 +66,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
 
     @Override
     public void stop(Future<Void> stop) {
-        LOGGER.trace("About to stop Verticle");
+        LOGGER.info("About to stop Verticle");
         if (manager != null) {
             manager.stopAsync().whenCompleteAsync((e, ex) -> {
                 stop.complete();
@@ -76,7 +78,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
 
     @Override
     public void start(Future<Void> start) {
-        LOGGER.trace("About to start Verticle");
+        LOGGER.info("About to start Verticle");
         LOGGER.info("Vertx uses LOGGER: {}, LoggerDelegate is {}", LOGGER, LOGGER.getDelegate());
         vertx.<RemoteCacheManager>executeBlocking(future -> {
             initConfiguration();
@@ -84,7 +86,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
             try {
                 Thread.sleep(200);
             } catch (InterruptedException e) {
-                LOGGER.debug("Exception caught while sleep(200) to wait for init {}", e, rcm);
+                LOGGER.trace("Exception caught while sleep(200) to wait for init {}", e, rcm);
             }
             LOGGER.info("Created RemoteCacheManager={}", rcm);
             future.complete(rcm);
@@ -136,7 +138,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
 
     protected void infoHandler(RoutingContext context) {
         context.response().putHeader("rc-type", "text/html").setStatusCode(HttpResponseStatus.OK.code())
-                .end("<body><head><title>Info</title></head><body>Info</body></html>");
+                .end("<body><head><title>Info</title></head><body>\nInfo\n</body></html>");
     }
 
     protected void restApiOnRoot(RoutingContext context) {
@@ -150,7 +152,8 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
                 continue;
             }
             LOGGER.debug("Found path={} for route {}", path, r);
-            b.appendString("<li><a href='").appendString(path).appendString("'>").appendString(path).appendString("</a></li>\n");
+            b.appendString("<li><a href='").appendString(path).appendString("'>").appendString(path)
+                    .appendString("</a></li>\n");
         }
         b.appendString("</ul></body></html>\n");
         response.putHeader("Content-Length", Integer.valueOf(b.length()).toString());
@@ -166,7 +169,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     }
 
     protected void unregisterEventBusHandler() {
-        LOGGER.trace("About to Unregister EventBusHadler for address{}", eventBusAddress);
+        LOGGER.info("About to Unregister EventBusHadler for address{}", eventBusAddress);
         getEventBus().consumer(eventBusAddress).unregister(result -> {
             if (result.succeeded()) {
                 LOGGER.info("EventBusHadler unregistered for address={}", eventBusAddress);
@@ -177,7 +180,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     }
 
     protected void registerEventBusHadler() {
-        LOGGER.trace("About to register EventBusHadler for address {}", eventBusAddress);
+        LOGGER.info("About to register EventBusHadler for address {}", eventBusAddress);
         getEventBus().consumer(eventBusAddress, this::defaultEventBusHandler).completionHandler(result -> {
             if (result.succeeded()) {
                 LOGGER.info("EventBusHadler registered for address={}", eventBusAddress);
@@ -188,13 +191,13 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     }
 
     protected void startHttpServer(Future<Void> future) {
-        LOGGER.trace("Creating HTTP server for host={}, port={}", httpServerHost, httpServerPort);
+        LOGGER.info("Creating HTTP server for host={}, port={}", httpServerHost, httpServerPort);
         vertx.createHttpServer().requestHandler(rootRouter::accept).listen(httpServerPort, httpServerHost, result -> {
             if (result.succeeded()) {
                 LOGGER.info("Vert.x HTTP Server started: " + result.result());
                 future.complete();
             } else {
-                LOGGER.error("Error while starting Vert.x HTTP Server", result.cause());
+                LOGGER.warn("Error while starting Vert.x HTTP Server", result.cause());
                 // future.fail(result.cause());
                 future.complete();
             }
@@ -203,10 +206,10 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
 
     protected RemoteCache<UUID, AbstractDataObject> getCache() {
         if (cache == null) {
-            LOGGER.debug("Trying to get cache: {}", serviceContextName);
+            LOGGER.trace("Trying to get cache: {}", serviceContextName);
             RemoteCache<UUID, AbstractDataObject> rc = manager.getCache(serviceContextName);
             cache = rc;
-            LOGGER.info("Got reference for RemoteCahe={}", rc.getName());
+            LOGGER.trace("Got reference for RemoteCahe={}", rc.getName());
         }
         return cache;
     }
@@ -239,7 +242,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     }
 
     protected Configuration getCacheManagerConfiguration() {
-        LOGGER.trace("Creating remote cache configuration for host={}, port={}", hotrodServerHost, hotrodServerPort);
+        LOGGER.debug("Creating remote cache configuration for host={}, port={}", hotrodServerHost, hotrodServerPort);
         ConfigurationBuilder builder = new ConfigurationBuilder();
         builder.addServer().host(hotrodServerHost).port(hotrodServerPort);
         return builder.build();
@@ -275,9 +278,29 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
         replyError(message, "Unknown operation " + operation);
     }
 
+    protected void getAsyncUtil(UUID id, Message<JsonObject> message, HttpResponseStatus success, Handler<JsonObject> replyError) {
+        getCache().getAsync(id).whenComplete((fetched, t) -> {
+            if (t != null) {
+                LOGGER.error("Error occured while working with cache", t);
+                replyError(message, t.getMessage());
+                return;
+            }
+            JsonObject reply = new JsonObject();
+            if (fetched == null) {
+                replyError.handle(reply);
+            } else {
+                reply.put("statusCode", success.code());
+                LOGGER.trace("GOT just created DataObject: {}", fetched);
+                reply.put("result", fetched.toJson());
+                LOGGER.trace("Reply to publisher with {}", reply);
+            }
+            message.reply(reply);
+        });
+    }
+
     protected void defaultCreateDataObject(Message<JsonObject> message) {
         JsonObject o = message.body();
-        LOGGER.debug("Requesting to PUT into Cache for o={}...", o);
+        LOGGER.trace("Requesting to PUT into Cache for o={}...", o);
 
         AbstractDataObject ado = dataObjectFromJson(o);
 
@@ -300,52 +323,66 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
             return;
         }
 
-        // LOGGER.debug("Putting DataObject info cache: {}", ado.toJson());
+        // LOGGER.trace("Putting DataObject info cache: {}", ado.toJson());
         c.putAsync(id, ado).whenComplete((result, t) -> {
-            LOGGER.debug("Cache PUT for id={}  completed with result: {}", id, t);
+            LOGGER.trace("Cache PUT for id={}  completed with result: {}", id, t);
             if (t != null) {
                 LOGGER.error("Error occured while working with cache", t);
                 replyError(message, t.getCause().getMessage());
                 return;
             }
-            JsonObject reply = new JsonObject();
-            reply.put("statusCode", HttpResponseStatus.CREATED.code());
-            AbstractDataObject created = c.get(id);
-            LOGGER.debug("COT just created DataObject: {}", created);
-            reply.put("result", created.toJson());
-            LOGGER.debug("Reply to publisher with {}", reply);
-            message.reply(reply);
+            getAsyncUtil(id, message, HttpResponseStatus.CREATED, reply -> {
+                // reply.put("statusCode", HttpResponseStatus.INTERNAL_SERVER_ERROR.code());
+                replyError(message, "Could not get just put dataObject with id " + id);
+            });
+            // c.getAsync(id).whenComplete((created, ex) -> {
+            // if (ex != null) {
+            // LOGGER.error("Error occured while working with cache", t);
+            // replyError(message, ex.getMessage());
+            // return;
+            // }
+            // JsonObject reply = new JsonObject();
+            // reply.put("statusCode", HttpResponseStatus.CREATED.code());
+            // LOGGER.trace("GOT just created DataObject: {}", created);
+            // reply.put("result", created.toJson());
+            // LOGGER.trace("Reply to publisher with {}", reply);
+            // message.reply(reply);
+            // });
         });
     }
 
     protected void defaultGetDataObject(Message<JsonObject> message) {
         final UUID id = UUID.fromString(message.body().getString(HTTP_GET_PARAMETER_ID));
-        LOGGER.debug("Requesting to GET Cache for id={}...", id);
-        getCache().getAsync(id).whenComplete((result, t) -> {
-            if (t != null) {
-                LOGGER.error("Error occured while working with cache", t);
-                replyError(message, t.getCause().getMessage());
-                return;
-            }
-            JsonObject reply = new JsonObject();
-            if (result == null) {
-                LOGGER.debug("Object Not found for id={}", id);
-                reply.put("statusCode", HttpResponseStatus.NOT_FOUND.code());
-            } else {
-                JsonObject json = result.toJson();
-                LOGGER.debug("GOT Object {} from Cache", json);
-                reply.put("statusCode", HttpResponseStatus.OK.code());
-                reply.put("result", json);
-                LOGGER.debug("Reply to publisher with {}", reply);
-            }
-            message.reply(reply);
+        LOGGER.trace("Requesting to GET Cache for id={}...", id);
+        getAsyncUtil(id, message, HttpResponseStatus.OK, reply -> {
+            LOGGER.debug("Object Not found for id={}", id);
+            reply.put("statusCode", HttpResponseStatus.NOT_FOUND.code());
         });
+        // getCache().getAsync(id).whenComplete((result, t) -> {
+        // if (t != null) {
+        // LOGGER.error("Error occured while working with cache", t);
+        // replyError(message, t.getCause().getMessage());
+        // return;
+        // }
+        // JsonObject reply = new JsonObject();
+        // if (result == null) {
+        // LOGGER.debug("Object Not found for id={}", id);
+        // reply.put("statusCode", HttpResponseStatus.NOT_FOUND.code());
+        // } else {
+        // JsonObject json = result.toJson();
+        // LOGGER.debug("GOT Object {} from Cache", json);
+        // reply.put("statusCode", HttpResponseStatus.OK.code());
+        // reply.put("result", json);
+        // LOGGER.debug("Reply to publisher with {}", reply);
+        // }
+        // message.reply(reply);
+        // });
     }
 
     protected void defaultUpdateDataObject(Message<JsonObject> message) {
         JsonObject json = message.body();
         final UUID id = UUID.fromString(json.getString(HTTP_GET_PARAMETER_ID));
-        LOGGER.debug("Requesting to UPDATE Cache for id={} for object {}...", id, json);
+        LOGGER.trace("Requesting to UPDATE Cache for id={} for object {}...", id, json);
 
         AbstractDataObject ado = dataObjectFromJson(json);
         if (ado instanceof Versionable) {
@@ -356,10 +393,11 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
                     if (_old.isVersionEqual(_new)) {
                         // real update
                         realDefaultUpdateDataObject(message, ado, true);
+                        return;
                     } else {
                         replyError(message,
-                                "Update object " + result + " with wrong versin " + ado.toJson().getString("version"));
-                        // return;
+                                "Update object " + result.toJson() + " with wrong versin " + ado.toJson().getString("version"));
+                        return;
                     }
                 } else {
                     replyError(message,
@@ -379,25 +417,42 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
         AbstractDataObject ado;
         if (versioned) {
             JsonObject json = _new.toJson();
-            json.put("version", ((Versionable) _new).versionAsString());
+            json.put("version", UUID.randomUUID().toString());
             ado = dataObjectFromJson(json);
         } else {
             ado = _new;
         }
 
         getCache().replaceAsync(id, ado).whenComplete((result, t) -> {
-            LOGGER.info("Cache REPLACE for id={} completed with result: {}", id, result);
+            LOGGER.trace("Cache REPLACE for id={} completed with result: {}", id, result);
             if (t != null) {
                 LOGGER.error("Error occured while working with cache", t);
                 replyError(message, t.getCause().getMessage());
                 return;
             }
-            JsonObject reply = new JsonObject();
-            reply.put("statusCode", HttpResponseStatus.OK.code());
-            reply.put("result", getCache().get(id).toJson());
-            // reply.put("result", result.toJson());
-            LOGGER.debug("Reply to publisher with {}", reply);
-            message.reply(reply);
+            getAsyncUtil(id, message, HttpResponseStatus.OK, reply -> {
+                // reply.put("statusCode", HttpResponseStatus.INTERNAL_SERVER_ERROR.code());
+                replyError(message, "Could not get just replaced dataObject with id " + id);
+            });
+            // c.getAsync(id).whenComplete((created, ex) -> {
+            //     if (ex != null) {
+            //         LOGGER.error("Error occured while working with cache", t);
+            //         replyError(message, ex.getMessage());
+            //         return;
+            //     }
+            //     JsonObject reply = new JsonObject();
+            //     reply.put("statusCode", HttpResponseStatus.OK.code());
+            //     LOGGER.trace("GOT just created DataObject: {}", created);
+            //     reply.put("result", created.toJson());
+            //     LOGGER.debug("Reply to publisher with {}", reply);
+            //     message.reply(reply);
+            // });
+            // // JsonObject reply = new JsonObject();
+            // // reply.put("statusCode", HttpResponseStatus.OK.code());
+            // // reply.put("result", getCache().get(id).toJson());
+            // // // reply.put("result", result.toJson());
+            // // LOGGER.debug("Reply to publisher with {}", reply);
+            // // message.reply(reply);
         });
     }
 
