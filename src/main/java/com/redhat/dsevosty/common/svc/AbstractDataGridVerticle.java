@@ -1,9 +1,14 @@
 package com.redhat.dsevosty.common.svc;
 
-import static com.redhat.dsevosty.common.ServiceConstant.*;
+import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_EVENTBUS_PREFIX;
+import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_HTTP_LISTEN_ADDRESS;
+import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_HTTP_LISTEN_PORT;
+import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_JDG_REMOTE_ADDRESS;
+import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_JDG_REMOTE_PORT;
+import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_NAMESPACE;
+import static com.redhat.dsevosty.common.ServiceConstant.SERVICE_OPERATION;
 
 import java.lang.management.ManagementFactory;
-import java.rmi.UnexpectedException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -215,9 +220,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     }
 
     protected void resetCache() {
-        // if (t instaceof ...) {
         cache = null;
-        // }
     }
 
     protected void initConfiguration() {
@@ -300,7 +303,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
 
     protected void defaultCreateDataObject(Message<JsonObject> message) {
         JsonObject o = message.body();
-        LOGGER.trace("Requesting to PUT into Cache for o={}...", o);
+        LOGGER.trace("About to PUT into Cache for o={}...", o);
 
         AbstractDataObject ado = dataObjectFromJson(o);
 
@@ -323,7 +326,6 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
             return;
         }
 
-        // LOGGER.trace("Putting DataObject info cache: {}", ado.toJson());
         c.putAsync(id, ado).whenComplete((result, t) -> {
             LOGGER.trace("Cache PUT for id={}  completed with result: {}", id, t);
             if (t != null) {
@@ -335,54 +337,22 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
                 // reply.put("statusCode", HttpResponseStatus.INTERNAL_SERVER_ERROR.code());
                 replyError(message, "Could not get just put dataObject with id " + id);
             });
-            // c.getAsync(id).whenComplete((created, ex) -> {
-            // if (ex != null) {
-            // LOGGER.error("Error occured while working with cache", t);
-            // replyError(message, ex.getMessage());
-            // return;
-            // }
-            // JsonObject reply = new JsonObject();
-            // reply.put("statusCode", HttpResponseStatus.CREATED.code());
-            // LOGGER.trace("GOT just created DataObject: {}", created);
-            // reply.put("result", created.toJson());
-            // LOGGER.trace("Reply to publisher with {}", reply);
-            // message.reply(reply);
-            // });
         });
     }
 
     protected void defaultGetDataObject(Message<JsonObject> message) {
         final UUID id = UUID.fromString(message.body().getString(HTTP_GET_PARAMETER_ID));
-        LOGGER.trace("Requesting to GET Cache for id={}...", id);
+        LOGGER.trace("About to GET Cache for id={}...", id);
         getAsyncUtil(id, message, HttpResponseStatus.OK, reply -> {
             LOGGER.debug("Object Not found for id={}", id);
             reply.put("statusCode", HttpResponseStatus.NOT_FOUND.code());
         });
-        // getCache().getAsync(id).whenComplete((result, t) -> {
-        // if (t != null) {
-        // LOGGER.error("Error occured while working with cache", t);
-        // replyError(message, t.getCause().getMessage());
-        // return;
-        // }
-        // JsonObject reply = new JsonObject();
-        // if (result == null) {
-        // LOGGER.debug("Object Not found for id={}", id);
-        // reply.put("statusCode", HttpResponseStatus.NOT_FOUND.code());
-        // } else {
-        // JsonObject json = result.toJson();
-        // LOGGER.debug("GOT Object {} from Cache", json);
-        // reply.put("statusCode", HttpResponseStatus.OK.code());
-        // reply.put("result", json);
-        // LOGGER.debug("Reply to publisher with {}", reply);
-        // }
-        // message.reply(reply);
-        // });
     }
 
     protected void defaultUpdateDataObject(Message<JsonObject> message) {
         JsonObject json = message.body();
         final UUID id = UUID.fromString(json.getString(HTTP_GET_PARAMETER_ID));
-        LOGGER.trace("Requesting to UPDATE Cache for id={} for object {}...", id, json);
+        LOGGER.trace("About to UPDATE Cache for id={} for object {}...", id, json);
 
         AbstractDataObject ado = dataObjectFromJson(json);
         if (ado instanceof Versionable) {
@@ -434,33 +404,14 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
                 // reply.put("statusCode", HttpResponseStatus.INTERNAL_SERVER_ERROR.code());
                 replyError(message, "Could not get just replaced dataObject with id " + id);
             });
-            // c.getAsync(id).whenComplete((created, ex) -> {
-            //     if (ex != null) {
-            //         LOGGER.error("Error occured while working with cache", t);
-            //         replyError(message, ex.getMessage());
-            //         return;
-            //     }
-            //     JsonObject reply = new JsonObject();
-            //     reply.put("statusCode", HttpResponseStatus.OK.code());
-            //     LOGGER.trace("GOT just created DataObject: {}", created);
-            //     reply.put("result", created.toJson());
-            //     LOGGER.debug("Reply to publisher with {}", reply);
-            //     message.reply(reply);
-            // });
-            // // JsonObject reply = new JsonObject();
-            // // reply.put("statusCode", HttpResponseStatus.OK.code());
-            // // reply.put("result", getCache().get(id).toJson());
-            // // // reply.put("result", result.toJson());
-            // // LOGGER.debug("Reply to publisher with {}", reply);
-            // // message.reply(reply);
         });
     }
 
     protected void defaultRemoveDataObject(Message<JsonObject> message) {
         final UUID id = UUID.fromString(message.body().getString(HTTP_GET_PARAMETER_ID));
-        LOGGER.debug("Requesting (HTTP/DELEETE) Cache for id={} for object {}...", id);
+        LOGGER.debug("About to REMOVE Cache for id={} for object {}...", id);
         getCache().removeAsync(id).whenCompleteAsync((result, t) -> {
-            LOGGER.info("Cache DELETE for id={} completed with result: {}", id, result);
+            LOGGER.trace("Cache DELETE for id={} completed with result: {}", id, result);
             if (t != null) {
                 LOGGER.error("Error occured while working with cache", t);
                 replyError(message, t.getCause().getMessage());
@@ -497,16 +448,10 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     // must be replaced with maven archetype generator with $package macro
     // return "${package}";
     protected abstract String getPackageName();
-    // throw new UnsupportedOperationException("Method mustbe overriden in
-    // subclass");
-    // }
 
     // must be replaced with maven archetype generator with $package macro
     // return "type=${artefectId}";
     protected abstract String getType();
-    // throw new UnsupportedOperationException("Method mustbe overrriden in
-    // subclass");
-    // }
 
     protected void registerMBean() {
         vertx.executeBlocking(future -> {
