@@ -47,6 +47,7 @@ import io.vertx.junit5.VertxTestContext;
 public class AccountDataGridVerticleTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(AccountDataGridVerticleTest.class);
     private static final String PUBLIC_CONTEXT_NAME = "account";
+    private static final int DEFAULT_DELAY = 3;
 
     private static InfinispanLocalHotrodServer<UUID, AbstractDataObject> server;
 
@@ -95,7 +96,7 @@ public class AccountDataGridVerticleTest {
             }
             context.completeNow();
         }));
-        context.awaitCompletion(15, TimeUnit.SECONDS);
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
 
     @BeforeEach
@@ -212,7 +213,7 @@ public class AccountDataGridVerticleTest {
         sender.<JsonObject>send(address, _new.toJson(), options, result -> {
             checkRigthResult(result, HttpResponseStatus.CREATED, context, this::handleCreateRightAnswer);
         });
-        context.awaitCompletion(5, TimeUnit.SECONDS);
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
 
     @Test
@@ -225,7 +226,7 @@ public class AccountDataGridVerticleTest {
             checkWrongResult(result, HttpResponseStatus.CREATED, HttpResponseStatus.INTERNAL_SERVER_ERROR, context,
                     this::handleCreateRightAnswer, this::handleCreateWrongAnswer);
         });
-        context.awaitCompletion(5, TimeUnit.SECONDS);
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
 
     @Test
@@ -238,7 +239,7 @@ public class AccountDataGridVerticleTest {
             checkWrongResult(result, HttpResponseStatus.CREATED, HttpResponseStatus.INTERNAL_SERVER_ERROR, context,
                     this::handleCreateRightAnswer, this::handleCreateWrongAnswer);
         });
-        context.awaitCompletion(5, TimeUnit.SECONDS);
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
 
     @Test
@@ -252,7 +253,7 @@ public class AccountDataGridVerticleTest {
                 assertThat(ADO).isEqualTo(fetched);
             });
         });
-        context.awaitCompletion(5, TimeUnit.SECONDS);
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
 
     @Test
@@ -263,7 +264,7 @@ public class AccountDataGridVerticleTest {
         sender.<JsonObject>send(address, new JsonObject().put("id", id.toString()), options, result -> {
             checkRigthResult(result, HttpResponseStatus.NOT_FOUND, context);
         });
-        context.awaitCompletion(5, TimeUnit.SECONDS);
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
 
     @Test
@@ -283,7 +284,7 @@ public class AccountDataGridVerticleTest {
             });
         });
 
-        context.awaitCompletion(2, TimeUnit.SECONDS);
+        context.awaitCompletion(1, TimeUnit.SECONDS);
 
         if (createdForUpdate == null) {
             context.failNow(new NullPointerException("Account has not created yet..."));
@@ -297,7 +298,7 @@ public class AccountDataGridVerticleTest {
                 LOGGER.info("Updated account is " + fetched);
             });
         });
-        context.awaitCompletion(6, TimeUnit.SECONDS);
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
 
     @Test
@@ -333,6 +334,11 @@ public class AccountDataGridVerticleTest {
                                 LOGGER.info("Updated account is " + rightAnswer);
                             }, this::handleCreateWrongAnswer);
                 });
-        context.awaitCompletion(5, TimeUnit.SECONDS);
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void testRestApiOnRoot(Vertx vertx, VertxTestContext context) throws InterruptedException {
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.MINUTES);
     }
 }

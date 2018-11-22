@@ -10,7 +10,7 @@ import io.vertx.core.json.JsonObject;
 public class AccountDataGridVerticle extends AbstractDataGridVerticle {
 
   public static final String PACKAGE_NAME = AccountDataGridVerticle.class.getPackage().getName();
-  public static final String ARTIFACT_ID = "accout";
+  public static final String ARTIFACT_ID = "account";
 
   @Override
   protected AbstractDataObject dataObjectFromJson(JsonObject json) {

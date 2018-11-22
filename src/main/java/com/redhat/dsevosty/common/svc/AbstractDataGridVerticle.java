@@ -26,13 +26,17 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.MultiMap;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.ext.web.Route;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
 
@@ -124,6 +128,33 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
     protected void registerManagementRestApi() {
         // https://www.devcon5.ch/en/blog/2017/09/15/vertx-modular-router-design/
         // throw new UnsupportedOperationException("Method is not implemented yet");
+        Router sub = Router.router(vertx);
+        sub.route("/info").handler(this::infoHandler);
+        rootRouter.mountSubRouter("/" + getType(), sub);
+        rootRouter.route("/").handler(this::restApiOnRoot);
+    }
+
+    protected void infoHandler(RoutingContext context) {
+        context.response().putHeader("rc-type", "text/html").setStatusCode(HttpResponseStatus.OK.code())
+                .end("<body><head><title>Info</title></head><body>Info</body></html>");
+    }
+
+    protected void restApiOnRoot(RoutingContext context) {
+        HttpServerResponse response = context.response();
+        response.putHeader("rc-type", "text/html").setStatusCode(HttpResponseStatus.OK.code());
+        Buffer b = Buffer.buffer();
+        b.appendString("<body><head><title>Endpoints</title></head><body><ul>\n");
+        for (Route r : rootRouter.getRoutes()) {
+            String path = r.getPath();
+            if (path == null) {
+                continue;
+            }
+            LOGGER.debug("Found path={} for route {}", path, r);
+            b.appendString("<li><a href='").appendString(path).appendString("'>").appendString(path).appendString("</a></li>\n");
+        }
+        b.appendString("</ul></body></html>\n");
+        response.putHeader("Content-Length", Integer.valueOf(b.length()).toString());
+        response.write(b).end();
     }
 
     protected EventBus getEventBus() {
