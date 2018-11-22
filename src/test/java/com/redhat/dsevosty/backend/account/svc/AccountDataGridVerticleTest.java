@@ -129,17 +129,17 @@ public class AccountDataGridVerticleTest {
         LOGGER.trace("Got expected Exception", t);
     }
 
-    protected void checkRigthResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus status,
+    protected void checkRightResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus status,
             VertxTestContext context) {
-        checkRigthResult(result, status, context, null);
+        checkRightResult(result, status, context, null);
     }
 
-    protected void checkRigthResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus status,
+    protected void checkRightResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus status,
             VertxTestContext context, Handler<AccountDataObject> handler) {
-        checkRigthResult(result, status, context, null, handler);
+        checkRightResult(result, status, context, null, handler);
     }
 
-    protected void checkRigthResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus status,
+    protected void checkRightResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus status,
             VertxTestContext context, Checkpoint check, Handler<AccountDataObject> handler) {
         if (result.succeeded()) {
             try {
@@ -215,7 +215,7 @@ public class AccountDataGridVerticleTest {
         options.addHeader(SERVICE_OPERATION.key, "create");
         AccountDataObject _new = new AccountDataObject();
         sender.<JsonObject>send(address, _new.toJson(), options, result -> {
-            checkRigthResult(result, HttpResponseStatus.CREATED, context, this::handleCreateRightAnswer);
+            checkRightResult(result, HttpResponseStatus.CREATED, context, this::handleCreateRightAnswer);
         });
         context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
@@ -252,7 +252,7 @@ public class AccountDataGridVerticleTest {
         options.addHeader(SERVICE_OPERATION.key, "get");
         id = ADO.getId();
         sender.<JsonObject>send(address, new JsonObject().put("id", id.toString()), options, result -> {
-            checkRigthResult(result, HttpResponseStatus.OK, context, fetched -> {
+            checkRightResult(result, HttpResponseStatus.OK, context, fetched -> {
                 LOGGER.info("GOT reply form server: {}", fetched);
                 assertThat(ADO).isEqualTo(fetched);
             });
@@ -266,7 +266,7 @@ public class AccountDataGridVerticleTest {
         options.addHeader(SERVICE_OPERATION.key, "get");
         id = ADO.defaultId();
         sender.<JsonObject>send(address, new JsonObject().put("id", id.toString()), options, result -> {
-            checkRigthResult(result, HttpResponseStatus.NOT_FOUND, context);
+            checkRightResult(result, HttpResponseStatus.NOT_FOUND, context);
         });
         context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
@@ -281,7 +281,7 @@ public class AccountDataGridVerticleTest {
         options.addHeader(SERVICE_OPERATION.key, "create");
         AccountDataObject _new = new AccountDataObject();
         sender.<JsonObject>send(address, _new.toJson(), options, result -> {
-            checkRigthResult(result, HttpResponseStatus.CREATED, context, create, fetched -> {
+            checkRightResult(result, HttpResponseStatus.CREATED, context, create, fetched -> {
                 LOGGER.info("GOT reply form server: {}", fetched.toJson());
                 createdForUpdate = fetched;
                 assertThat(_new).isEqualTo(createdForUpdate);
@@ -297,7 +297,7 @@ public class AccountDataGridVerticleTest {
         createdForUpdate.setStatus(AccountStatusCode.ACTIVE.name());
         options.addHeader(SERVICE_OPERATION.key, "update");
         sender.<JsonObject>send(address, createdForUpdate.toJson(), options, result -> {
-            checkRigthResult(result, HttpResponseStatus.OK, context, update, fetched -> {
+            checkRightResult(result, HttpResponseStatus.OK, context, update, fetched -> {
                 assertThat(createdForUpdate).isEqualTo(fetched);
                 LOGGER.info("Updated account is " + fetched);
             });
@@ -316,7 +316,7 @@ public class AccountDataGridVerticleTest {
         options.addHeader(SERVICE_OPERATION.key, "create");
         AccountDataObject _new = new AccountDataObject();
         sender.<JsonObject>send(address, _new.toJson(), options, result -> {
-            checkRigthResult(result, HttpResponseStatus.CREATED, context, create, fetched -> {
+            checkRightResult(result, HttpResponseStatus.CREATED, context, create, fetched -> {
                 LOGGER.info("GOT reply form server: {}", fetched.toJson());
                 createdForUpdate = fetched;
                 assertThat(_new).isEqualTo(createdForUpdate);
@@ -374,7 +374,7 @@ public class AccountDataGridVerticleTest {
     }
 
     @Test
-    public void testINfoHandler(Vertx vertx, VertxTestContext context) throws InterruptedException {
+    public void testInfoHandler(Vertx vertx, VertxTestContext context) throws InterruptedException {
         WebClient web = WebClient.create(vertx);
         web.get(httpPort, SERVICE_HTTP_LISTEN_ADDRESS.value, "/account/info").send(response -> {
             httpResponseHandler(response, context, body -> {
