@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.redhat.dsevosty.common.AccountStatusCode;
+import com.redhat.dsevosty.common.CurrencyCode;
 import com.redhat.dsevosty.common.model.AbstractDataObject;
 import com.redhat.dsevosty.common.model.Versionable;
 
@@ -18,15 +20,17 @@ public class AccountDataObject implements AbstractDataObject, Versionable {
     private String currencyISO4217;
     private boolean credit;
     private BigDecimal amount;
+    private String status;
     private UUID metaId;
     private UUID version;
 
     public AccountDataObject() {
         this.id = defaultId();
-        currencyISO4217 = "RUB";
+        currencyISO4217 = CurrencyCode.RUB.name();
         number = "ААААА-BBB-C-DDDD-EEEEEEE";
         credit = false;
         amount = new BigDecimal("0.00");
+        status = AccountStatusCode.CREATED.name();
         metaId = null;
         this.version = null;
     }
@@ -37,18 +41,19 @@ public class AccountDataObject implements AbstractDataObject, Versionable {
         this.currencyISO4217 = other.currencyISO4217;
         this.credit = other.credit;
         this.amount = other.amount;
+        this.status = AccountStatusCode.CREATED.name();
         this.metaId = other.metaId;
         this.version = null;
     }
 
-    public AccountDataObject(UUID id, String number, String currencyISO4217, boolean credit, BigDecimal amount,
-            UUID metaId) {
+    public AccountDataObject(UUID id, String number, String currencyISO4217, boolean credit, BigDecimal amount) {
         this.id = id;
         this.number = number;
         this.currencyISO4217 = currencyISO4217;
         this.credit = credit;
         this.amount = amount;
-        this.metaId = metaId;
+        this.status = AccountStatusCode.CREATED.name();
+        this.metaId = null;
         this.version = null;
     }
 
@@ -70,6 +75,10 @@ public class AccountDataObject implements AbstractDataObject, Versionable {
         val = json.getString("amount");
         if (val != null) {
             amount = new BigDecimal(val);
+        }
+        val = json.getString("status");
+        if (val != null) {
+            status = val;
         }
         val = json.getString("metaId");
         if (val != null) {
@@ -125,6 +134,14 @@ public class AccountDataObject implements AbstractDataObject, Versionable {
         this.amount = amount;
     }
 
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
     public UUID getMetaId() {
         return metaId;
     }
@@ -141,6 +158,7 @@ public class AccountDataObject implements AbstractDataObject, Versionable {
         json.put("currencyISO4217", currencyISO4217);
         json.put("credit", credit);
         json.put("amount", amount.toString());
+        json.put("status", status);
         if (metaId != null) {
             json.put("metaId", metaId.toString());
         }

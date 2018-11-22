@@ -90,9 +90,9 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
                 rootRouter = Router.router(vertx);
                 registerManagementRestApi();
                 allowCorsSupport(rootRouter);
-                startHttpServer(start);
                 registerMBean();
                 registerEventBusHadler();
+                startHttpServer(start);
             } else {
                 manager = null;
                 LOGGER.fatal("Error while creating remote cache manager", result.cause());

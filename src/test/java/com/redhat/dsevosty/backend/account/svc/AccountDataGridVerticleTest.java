@@ -13,10 +13,9 @@ import java.net.ServerSocket;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import javax.activation.UnsupportedDataTypeException;
-
 import com.redhat.dsevosty.backend.account.model.AccountDataObject;
 import com.redhat.dsevosty.backend.util.InfinispanLocalHotrodServer;
+import com.redhat.dsevosty.common.AccountStatusCode;
 import com.redhat.dsevosty.common.model.AbstractDataObject;
 
 import org.infinispan.configuration.cache.ConfigurationBuilder;
@@ -29,10 +28,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.vertx.core.AsyncResult;
 import io.vertx.core.DeploymentOptions;
+import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.Message;
 import io.vertx.core.eventbus.ReplyException;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
@@ -46,7 +48,6 @@ public class AccountDataGridVerticleTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(AccountDataGridVerticleTest.class);
     private static final String PUBLIC_CONTEXT_NAME = "account";
 
-    // private static InfinispanLocalHotrodServer<UUID, AccountDataObject> server;
     private static InfinispanLocalHotrodServer<UUID, AbstractDataObject> server;
 
     private EventBus sender;
@@ -115,173 +116,157 @@ public class AccountDataGridVerticleTest {
         // context.awaitCompletion(5, TimeUnit.SECONDS);
     }
 
-    // @Test
+    protected void handleCreateRightAnswer(AccountDataObject ado) {
+        LOGGER.info("Account {} added", ado);
+    }
+
+    protected void handleCreateWrongAnswer(Throwable t) {
+        LOGGER.trace("Got expected Exception", t);
+    }
+
+    protected void checkRigthResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus status,
+            VertxTestContext context) {
+        checkRigthResult(result, status, context, null);
+    }
+
+    protected void checkRigthResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus status,
+            VertxTestContext context, Handler<AccountDataObject> handler) {
+        checkRigthResult(result, status, context, null, handler);
+    }
+
+    protected void checkRigthResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus status,
+            VertxTestContext context, Checkpoint check, Handler<AccountDataObject> handler) {
+        if (result.succeeded()) {
+            try {
+                JsonObject json = result.result().body();
+                assertThat(json.getInteger("statusCode")).isEqualTo(status.code());
+                JsonObject accountJson = json.getJsonObject("result");
+                if (accountJson != null) {
+                    AccountDataObject ado = new AccountDataObject(accountJson);
+                    if (handler != null) {
+                        handler.handle(ado);
+                    }
+                }
+                if (check == null) {
+                    context.completeNow();
+                } else {
+                    check.flag();
+                }
+            } catch (Throwable e) {
+                context.failNow(e);
+            }
+        } else {
+            final Throwable t = result.cause();
+            LOGGER.error("Error occured while creating Account", t);
+            context.failNow(t);
+        }
+
+    }
+
+    protected void checkWrongResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus right,
+            HttpResponseStatus wrong, VertxTestContext context, Handler<AccountDataObject> rightAnswer,
+            Handler<Throwable> wrongAnswer) {
+        checkWrongResult(result, right, wrong, context, null, rightAnswer, wrongAnswer);
+    }
+
+    protected void checkWrongResult(AsyncResult<Message<JsonObject>> result, HttpResponseStatus right,
+            HttpResponseStatus wrong, VertxTestContext context, Checkpoint check,
+            Handler<AccountDataObject> rightAnswer, Handler<Throwable> wrongAnswer) {
+        if (result.succeeded()) {
+            JsonObject json = result.result().body();
+            assertThat(json.getInteger("statusCode")).isEqualTo(right.code());
+            JsonObject accountJson = json.getJsonObject("result");
+            if (accountJson != null) {
+                AccountDataObject ado = new AccountDataObject(accountJson);
+                if (rightAnswer != null) {
+                    rightAnswer.handle(ado);
+                }
+            }
+            context.failNow(new IllegalStateException("Account must not be created!!!"));
+        } else {
+            final Throwable t = result.cause();
+            if (t instanceof ReplyException) {
+                ReplyException e = (ReplyException) t;
+                LOGGER.info("Expected error occured: {}, error code: {}", e.getMessage(), e.failureCode());
+                assertThat(e.failureCode()).isEqualTo(wrong.code());
+                if (wrongAnswer != null) {
+                    wrongAnswer.handle(t);
+                }
+                if (check == null) {
+                    context.completeNow();
+                } else {
+                    check.flag();
+                }
+            } else {
+                LOGGER.error("Error occured while creating Account", t);
+                context.failNow(t);
+            }
+        }
+    }
+
+    @Test
     public void createAccount(Vertx vertx, VertxTestContext context) throws InterruptedException {
         DeliveryOptions options = new DeliveryOptions();
         options.addHeader(SERVICE_OPERATION.key, "create");
         AccountDataObject _new = new AccountDataObject();
-        sender.send(address, _new.toJson(), options, result -> {
-            if (result.succeeded()) {
-                Object answer = result.result().body();
-                if (answer instanceof JsonObject) {
-                    JsonObject json = (JsonObject) answer;
-                    assertThat(json.getInteger("statusCode")).isEqualTo(HttpResponseStatus.CREATED.code());
-                    AccountDataObject created = new AccountDataObject(json.getJsonObject("result"));
-                    LOGGER.info("Account {} added", created);
-                    context.completeNow();
-                } else {
-                    final String msg = "Usupported object class " + answer.getClass().getName();
-                    LOGGER.error(msg);
-                    context.failNow(new UnsupportedDataTypeException(msg));
-                }
-            } else {
-                final Throwable t = result.cause();
-                LOGGER.error("Error occured while creating Account", t);
-                context.failNow(t);
-            }
+        sender.<JsonObject>send(address, _new.toJson(), options, result -> {
+            checkRigthResult(result, HttpResponseStatus.CREATED, context, this::handleCreateRightAnswer);
         });
         context.awaitCompletion(5, TimeUnit.SECONDS);
     }
 
-    // @Test
-    public void createAccountWithVersionMustBefail(Vertx vertx, VertxTestContext context) throws InterruptedException {
+    @Test
+    public void createAccountWithVersionMustBeFail(Vertx vertx, VertxTestContext context) throws InterruptedException {
         DeliveryOptions options = new DeliveryOptions();
         options.addHeader(SERVICE_OPERATION.key, "create");
         AccountDataObject _new = new AccountDataObject();
-        // AccountDataObject _new = ADO;
         _new.setVersion();
-        sender.send(address, _new.toJson(), options, result -> {
-            if (result.succeeded()) {
-                Object answer = result.result().body();
-                if (answer instanceof JsonObject) {
-                    JsonObject json = (JsonObject) answer;
-                    assertThat(json.getInteger("statusCode")).isEqualTo(HttpResponseStatus.CREATED.code());
-                    AccountDataObject created = new AccountDataObject(json.getJsonObject("result"));
-                    LOGGER.info("Account {} added", created);
-                    context.failNow(new IllegalStateException("Account must not be created!!!"));
-                } else {
-                    final String msg = "Usupported object class " + answer.getClass().getName();
-                    LOGGER.error(msg);
-                    context.failNow(new UnsupportedDataTypeException(msg));
-                }
-            } else {
-                final Throwable t = result.cause();
-                if (t instanceof ReplyException) {
-                    ReplyException e = (ReplyException) t;
-                    LOGGER.debug("Expected error occured: {} with code: {}", e.getMessage(), e.failureCode());
-                    assertThat(e.failureCode()).isEqualTo(HttpResponseStatus.INTERNAL_SERVER_ERROR.code());
-                    context.completeNow();
-                } else {
-                    LOGGER.error("Error occured while creating Account", t);
-                    context.failNow(t);
-                }
-            }
+        sender.<JsonObject>send(address, _new.toJson(), options, result -> {
+            checkWrongResult(result, HttpResponseStatus.CREATED, HttpResponseStatus.INTERNAL_SERVER_ERROR, context,
+                    this::handleCreateRightAnswer, this::handleCreateWrongAnswer);
         });
         context.awaitCompletion(5, TimeUnit.SECONDS);
     }
 
-    // @Test
-    public void reCreateAlreadyExistedAccountMustBefail(Vertx vertx, VertxTestContext context)
+    @Test
+    public void reCreateAlreadyExistedAccountMustBeFail(Vertx vertx, VertxTestContext context)
             throws InterruptedException {
         DeliveryOptions options = new DeliveryOptions();
         options.addHeader(SERVICE_OPERATION.key, "create");
         AccountDataObject _new = ADO;
-        sender.send(address, _new.toJson(), options, result -> {
-            if (result.succeeded()) {
-                Object answer = result.result().body();
-                if (answer instanceof JsonObject) {
-                    JsonObject json = (JsonObject) answer;
-                    assertThat(json.getInteger("statusCode")).isEqualTo(HttpResponseStatus.CREATED.code());
-                    AccountDataObject created = new AccountDataObject(json.getJsonObject("result"));
-                    LOGGER.info("Account {} added", created);
-                    context.failNow(new IllegalStateException("Account must not be created!!!"));
-                } else {
-                    final String msg = "Usupported object class " + answer.getClass().getName();
-                    LOGGER.error(msg);
-                    context.failNow(new UnsupportedDataTypeException(msg));
-                }
-            } else {
-                final Throwable t = result.cause();
-                if (t instanceof ReplyException) {
-                    ReplyException e = (ReplyException) t;
-                    LOGGER.debug("Expected error occured: {} with code: {}", e.getMessage(), e.failureCode());
-                    assertThat(e.failureCode()).isEqualTo(HttpResponseStatus.INTERNAL_SERVER_ERROR.code());
-                    context.completeNow();
-                } else {
-                    LOGGER.error("Error occured while creating Account", t);
-                    context.failNow(t);
-                }
-            }
+        sender.<JsonObject>send(address, _new.toJson(), options, result -> {
+            checkWrongResult(result, HttpResponseStatus.CREATED, HttpResponseStatus.INTERNAL_SERVER_ERROR, context,
+                    this::handleCreateRightAnswer, this::handleCreateWrongAnswer);
         });
         context.awaitCompletion(5, TimeUnit.SECONDS);
     }
 
-    // @Test
+    @Test
     public void getAccount(Vertx vertx, VertxTestContext context) throws InterruptedException {
         DeliveryOptions options = new DeliveryOptions();
         options.addHeader(SERVICE_OPERATION.key, "get");
-        id = ADO.defaultId();
-        sender.send(address, new JsonObject().put("id", id.toString()), options, result -> {
-            if (result.succeeded()) {
-                Object answer = result.result().body();
-                if (answer instanceof JsonObject) {
-                    JsonObject json = (JsonObject) answer;
-                    try {
-                        final int statusCode = json.getInteger("statusCode");
-                        assertThat(statusCode).isEqualTo(HttpResponseStatus.OK.code());
-                        AccountDataObject fetched = new AccountDataObject(json.getJsonObject("result"));
-                        LOGGER.info("GOT reply form server: {}", fetched);
-                        assertThat(ADO).isEqualTo(fetched);
-                        context.completeNow();
-                    } catch (Throwable e) {
-                        context.failNow(e);
-                    }
-                } else {
-                    final String msg = "Usupported object class " + answer.getClass().getName();
-                    LOGGER.error(msg);
-                    context.failNow(new UnsupportedDataTypeException(msg));
-                }
-            } else {
-                final Throwable t = result.cause();
-                LOGGER.error("Error occured while fetching Account for id=" + id, t);
-                context.failNow(t);
-            }
+        id = ADO.getId();
+        sender.<JsonObject>send(address, new JsonObject().put("id", id.toString()), options, result -> {
+            checkRigthResult(result, HttpResponseStatus.OK, context, fetched -> {
+                LOGGER.info("GOT reply form server: {}", fetched);
+                assertThat(ADO).isEqualTo(fetched);
+            });
         });
         context.awaitCompletion(5, TimeUnit.SECONDS);
     }
 
-    // @Test
+    @Test
     public void getNotExistedAccount(Vertx vertx, VertxTestContext context) throws InterruptedException {
         DeliveryOptions options = new DeliveryOptions();
         options.addHeader(SERVICE_OPERATION.key, "get");
         id = ADO.defaultId();
-        sender.send(address, new JsonObject().put("id", id.toString()), options, result -> {
-            if (result.succeeded()) {
-                Object answer = result.result().body();
-                if (answer instanceof JsonObject) {
-                    JsonObject json = (JsonObject) answer;
-                    try {
-                        final int statusCode = json.getInteger("statusCode");
-                        assertThat(statusCode).isEqualTo(HttpResponseStatus.NOT_FOUND.code());
-                        context.completeNow();
-                    } catch (Throwable e) {
-                        context.failNow(e);
-                    }
-                } else {
-                    final String msg = "Usupported object class " + answer.getClass().getName();
-                    LOGGER.error(msg);
-                    context.failNow(new UnsupportedDataTypeException(msg));
-                }
-            } else {
-                final Throwable t = result.cause();
-                LOGGER.error("Error occured while fetching Account for id=" + id, t);
-                context.failNow(t);
-            }
+        sender.<JsonObject>send(address, new JsonObject().put("id", id.toString()), options, result -> {
+            checkRigthResult(result, HttpResponseStatus.NOT_FOUND, context);
         });
         context.awaitCompletion(5, TimeUnit.SECONDS);
     }
 
-    // @Test
+    @Test
     public void updateAccount(Vertx vertx, VertxTestContext context) throws InterruptedException {
         Checkpoint create = context.checkpoint();
         Checkpoint update = context.checkpoint();
@@ -290,70 +275,34 @@ public class AccountDataGridVerticleTest {
         DeliveryOptions options = new DeliveryOptions();
         options.addHeader(SERVICE_OPERATION.key, "create");
         AccountDataObject _new = new AccountDataObject();
-        sender.send(address, _new.toJson(), options, result -> {
-            if (result.succeeded()) {
-                Object answer = result.result().body();
-                if (answer instanceof JsonObject) {
-                    JsonObject json = (JsonObject) answer;
-                    try {
-                        final int statusCode = json.getInteger("statusCode");
-                        assertThat(statusCode).isEqualTo(HttpResponseStatus.CREATED.code());
-                        createdForUpdate = new AccountDataObject(json.getJsonObject("result"));
-                        assertThat(_new).isEqualTo(createdForUpdate);
-                        create.flag();
-                    } catch (Throwable e) {
-                        context.failNow(e);
-                    }
-                } else {
-                    final String msg = "Usupported object class " + answer.getClass().getName();
-                    LOGGER.error(msg);
-                    context.failNow(new UnsupportedDataTypeException(msg));
-                }
-            } else {
-                final Throwable t = result.cause();
-                LOGGER.error("Error occured while creating Account", t);
-                context.failNow(t);
-            }
+        sender.<JsonObject>send(address, _new.toJson(), options, result -> {
+            checkRigthResult(result, HttpResponseStatus.CREATED, context, create, fetched -> {
+                LOGGER.info("GOT reply form server: {}", fetched.toJson());
+                createdForUpdate = fetched;
+                assertThat(_new).isEqualTo(createdForUpdate);
+            });
         });
 
-        context.awaitCompletion(1, TimeUnit.SECONDS);
+        context.awaitCompletion(2, TimeUnit.SECONDS);
 
         if (createdForUpdate == null) {
             context.failNow(new NullPointerException("Account has not created yet..."));
         }
-        createdForUpdate.setAmount(new BigDecimal("10000.00"));
+        // createdForUpdate.setAmount(new BigDecimal("10000.00"));
+        createdForUpdate.setStatus(AccountStatusCode.ACTIVE.name());
         options.addHeader(SERVICE_OPERATION.key, "update");
-        sender.send(address, createdForUpdate.toJson(), options, result -> {
-            if (result.succeeded()) {
-                Object answer = result.result().body();
-                if (answer instanceof JsonObject) {
-                    JsonObject json = (JsonObject) answer;
-                    try {
-                        final int statusCode = json.getInteger("statusCode");
-                        assertThat(statusCode).isEqualTo(HttpResponseStatus.OK.code());
-                        AccountDataObject updated = new AccountDataObject(json.getJsonObject("result"));
-                        assertThat(createdForUpdate).isEqualTo(updated);
-                        LOGGER.info("Updated account is " + updated);
-                        update.flag();
-                    } catch (Throwable e) {
-                        context.failNow(e);
-                    }
-                } else {
-                    final String msg = "Usupported object class " + answer.getClass().getName();
-                    LOGGER.error(msg);
-                    context.failNow(new UnsupportedDataTypeException(msg));
-                }
-            } else {
-                final Throwable t = result.cause();
-                LOGGER.error("Error occured while updating Account", t);
-                context.failNow(t);
-            }
+        sender.<JsonObject>send(address, createdForUpdate.toJson(), options, result -> {
+            checkRigthResult(result, HttpResponseStatus.OK, context, update, fetched -> {
+                assertThat(createdForUpdate).isEqualTo(fetched);
+                LOGGER.info("Updated account is " + fetched);
+            });
         });
-        context.awaitCompletion(5, TimeUnit.SECONDS);
+        context.awaitCompletion(6, TimeUnit.SECONDS);
     }
 
     @Test
-    public void updateAccountWithWrongVersionMustBeFail(Vertx vertx, VertxTestContext context) throws InterruptedException {
+    public void updateAccountWithWrongVersionMustBeFail(Vertx vertx, VertxTestContext context)
+            throws InterruptedException {
         Checkpoint create = context.checkpoint();
         Checkpoint update = context.checkpoint();
         createdForUpdate = null;
@@ -361,30 +310,12 @@ public class AccountDataGridVerticleTest {
         DeliveryOptions options = new DeliveryOptions();
         options.addHeader(SERVICE_OPERATION.key, "create");
         AccountDataObject _new = new AccountDataObject();
-        sender.send(address, _new.toJson(), options, result -> {
-            if (result.succeeded()) {
-                Object answer = result.result().body();
-                if (answer instanceof JsonObject) {
-                    JsonObject json = (JsonObject) answer;
-                    try {
-                        final int statusCode = json.getInteger("statusCode");
-                        assertThat(statusCode).isEqualTo(HttpResponseStatus.CREATED.code());
-                        createdForUpdate = new AccountDataObject(json.getJsonObject("result"));
-                        assertThat(_new).isEqualTo(createdForUpdate);
-                        create.flag();
-                    } catch (Throwable e) {
-                        context.failNow(e);
-                    }
-                } else {
-                    final String msg = "Usupported object class " + answer.getClass().getName();
-                    LOGGER.error(msg);
-                    context.failNow(new UnsupportedDataTypeException(msg));
-                }
-            } else {
-                final Throwable t = result.cause();
-                LOGGER.error("Error occured while creating Account", t);
-                context.failNow(t);
-            }
+        sender.<JsonObject>send(address, _new.toJson(), options, result -> {
+            checkRigthResult(result, HttpResponseStatus.CREATED, context, create, fetched -> {
+                LOGGER.info("GOT reply form server: {}", fetched.toJson());
+                createdForUpdate = fetched;
+                assertThat(_new).isEqualTo(createdForUpdate);
+            });
         });
 
         context.awaitCompletion(1, TimeUnit.SECONDS);
@@ -394,32 +325,14 @@ public class AccountDataGridVerticleTest {
         }
         createdForUpdate.setAmount(new BigDecimal("10000.00"));
         options.addHeader(SERVICE_OPERATION.key, "update");
-        sender.send(address, createdForUpdate.toJson().put("version", UUID.randomUUID().toString()), options, result -> {
-            if (result.succeeded()) {
-                Object answer = result.result().body();
-                if (answer instanceof JsonObject) {
-                    JsonObject json = (JsonObject) answer;
-                    try {
-                        final int statusCode = json.getInteger("statusCode");
-                        assertThat(statusCode).isEqualTo(HttpResponseStatus.OK.code());
-                        AccountDataObject updated = new AccountDataObject(json.getJsonObject("result"));
-                        assertThat(createdForUpdate).isEqualTo(updated);
-                        LOGGER.info("Updated account is " + updated);
-                        update.flag();
-                    } catch (Throwable e) {
-                        context.failNow(e);
-                    }
-                } else {
-                    final String msg = "Usupported object class " + answer.getClass().getName();
-                    LOGGER.error(msg);
-                    context.failNow(new UnsupportedDataTypeException(msg));
-                }
-            } else {
-                final Throwable t = result.cause();
-                LOGGER.error("Error occured while updating Account", t);
-                context.failNow(t);
-            }
-        });
+        sender.<JsonObject>send(address, createdForUpdate.toJson().put("version", UUID.randomUUID().toString()),
+                options, result -> {
+                    checkWrongResult(result, HttpResponseStatus.OK, HttpResponseStatus.INTERNAL_SERVER_ERROR, context,
+                            update, rightAnswer -> {
+                                assertThat(createdForUpdate).isEqualTo(rightAnswer);
+                                LOGGER.info("Updated account is " + rightAnswer);
+                            }, this::handleCreateWrongAnswer);
+                });
         context.awaitCompletion(5, TimeUnit.SECONDS);
     }
 }
