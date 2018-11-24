@@ -11,7 +11,7 @@
     <vertx-version>3.5.4</vertx-version>
     <infinispan-version>9.1.6.Final</infinispan-version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <vertx.verticle>com.redhat.dsevosty.SimpleVerticle</vertx.verticle>
+    <!-- vertx.default.verticle>com.redhat.dsevosty.SimpleVerticle</vertx.default.verticle -->
     
     <junit4.version>4.12</junit4.version>
     <junit-jupiter.version>5.3.1</junit-jupiter.version>
@@ -148,10 +148,10 @@
         <version>${maven.surefire.plugin.version}</version>
         <configuration>
           <systemProperties>
-            <property>
+            <!-- property>
               <name>java.util.logging.config.file</name>
               <value>src/main/resources/logging.properties</value>
-            </property>
+            </property -->
             <property>
               <name>vertx.logger-delegate-factory-class-name</name>
               <value>io.vertx.core.logging.Log4j2LogDelegateFactory</value>
@@ -168,7 +168,7 @@
         </configuration>
       </plugin>
 
-      <plugin>
+      <!-- plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <version>2.3</version>
@@ -183,7 +183,7 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <manifestEntries>
                     <Main-Class>io.vertx.core.Starter</Main-Class>
-                    <Main-Verticle>com.redhat.dsevosty.SimpleVerticle</Main-Verticle>
+                    <Main-Verticle>${vertx.default.verticle}</Main-Verticle>
                   </manifestEntries>
                 </transformer>
               </transformers>
@@ -192,7 +192,7 @@
             </configuration>
           </execution>
         </executions>
-      </plugin>
+      </plugin -->
 
       <!-- plugin>
         <groupId>io.fabric8</groupId>
