@@ -209,7 +209,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
         });
     }
 
-    protected RemoteCache<UUID, AbstractDataObject> getCache() {
+    protected synchronized RemoteCache<UUID, AbstractDataObject> getCache() {
         if (cache == null) {
             LOGGER.trace("Trying to get cache: {}", serviceContextName);
             RemoteCache<UUID, AbstractDataObject> rc = manager.getCache(serviceContextName);
@@ -219,8 +219,10 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
         return cache;
     }
 
-    protected void resetCache() {
+    protected synchronized void resetCache(Throwable t) {
+        // if (t instanceof ) {
         cache = null;
+        // }
     }
 
     protected void initConfiguration() {
@@ -281,11 +283,12 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
         replyError(message, "Unknown operation " + operation);
     }
 
-    protected void getAsyncUtil(UUID id, Message<JsonObject> message, HttpResponseStatus success, Handler<JsonObject> replyError) {
+    protected void getAsyncUtil(UUID id, Message<JsonObject> message, HttpResponseStatus success,
+            Handler<JsonObject> replyError) {
         getCache().getAsync(id).whenComplete((fetched, t) -> {
             if (t != null) {
                 LOGGER.error("Error occured while working with cache", t);
-                replyError(message, t.getMessage());
+                replyError(message, t);
                 return;
             }
             JsonObject reply = new JsonObject();
@@ -327,10 +330,10 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
         }
 
         c.putAsync(id, ado).whenComplete((result, t) -> {
-            LOGGER.trace("Cache PUT for id={}  completed with result: {}", id, t);
+            LOGGER.trace("Cache PUT for id={}  completed with result: {}", id, result);
             if (t != null) {
                 LOGGER.error("Error occured while working with cache", t);
-                replyError(message, t.getCause().getMessage());
+                replyError(message, t);
                 return;
             }
             getAsyncUtil(id, message, HttpResponseStatus.CREATED, reply -> {
@@ -344,7 +347,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
         final UUID id = UUID.fromString(message.body().getString(HTTP_GET_PARAMETER_ID));
         LOGGER.trace("About to GET Cache for id={}...", id);
         getAsyncUtil(id, message, HttpResponseStatus.OK, reply -> {
-            LOGGER.debug("Object Not found for id={}", id);
+            LOGGER.debug("DataObject not found for id={}", id);
             reply.put("statusCode", HttpResponseStatus.NOT_FOUND.code());
         });
     }
@@ -365,8 +368,8 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
                         realDefaultUpdateDataObject(message, ado, true);
                         return;
                     } else {
-                        replyError(message,
-                                "Update object " + result.toJson() + " with wrong versin " + ado.toJson().getString("version"));
+                        replyError(message, "Update object " + result.toJson() + " with wrong versin "
+                                + ado.toJson().getString("version"));
                         return;
                     }
                 } else {
@@ -397,7 +400,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
             LOGGER.trace("Cache REPLACE for id={} completed with result: {}", id, result);
             if (t != null) {
                 LOGGER.error("Error occured while working with cache", t);
-                replyError(message, t.getCause().getMessage());
+                replyError(message, t);
                 return;
             }
             getAsyncUtil(id, message, HttpResponseStatus.OK, reply -> {
@@ -414,7 +417,7 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
             LOGGER.trace("Cache DELETE for id={} completed with result: {}", id, result);
             if (t != null) {
                 LOGGER.error("Error occured while working with cache", t);
-                replyError(message, t.getCause().getMessage());
+                replyError(message, t);
                 return;
             }
             JsonObject reply = new JsonObject();
@@ -424,12 +427,12 @@ public abstract class AbstractDataGridVerticle extends AbstractVerticle implemen
         });
     }
 
+    private void replyError(Message<JsonObject> message, Throwable t) {
+        resetCache(t);
+        replyError(message, t.getMessage());
+    }
+
     private void replyError(Message<JsonObject> message, String msg) {
-        // JsonObject reply = new JsonObject();
-        resetCache();
-        // reply.put("statusCode", );
-        // reply.put("errorMessage", t.getMessage());
-        // message.reply(reply);
         message.fail(HttpResponseStatus.INTERNAL_SERVER_ERROR.code(), msg);
     }
 
