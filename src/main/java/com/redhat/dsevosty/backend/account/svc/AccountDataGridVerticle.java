@@ -2,12 +2,12 @@ package com.redhat.dsevosty.backend.account.svc;
 
 import com.redhat.dsevosty.backend.account.model.AccountDataObject;
 import com.redhat.dsevosty.common.model.AbstractDataObject;
-import com.redhat.dsevosty.common.svc.AbstractDataGridVerticle;
+import com.redhat.dsevosty.common.svc.DataGridVerticle;
 
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonObject;
 
-public class AccountDataGridVerticle extends AbstractDataGridVerticle {
+public class AccountDataGridVerticle extends DataGridVerticle {
 
   public static final String PACKAGE_NAME = AccountDataGridVerticle.class.getPackage().getName();
   public static final String ARTIFACT_ID = "account";
@@ -31,6 +31,8 @@ public class AccountDataGridVerticle extends AbstractDataGridVerticle {
   }
 
   @Override
-  protected void customEventBusHandler(Message<JsonObject> message, String operation) {
+  protected boolean customEventBusHandler(Message<JsonObject> message, String operation) {
+    return true;
   }
+
 }
