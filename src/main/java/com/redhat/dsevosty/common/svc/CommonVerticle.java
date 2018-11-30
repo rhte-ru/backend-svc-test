@@ -27,7 +27,6 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
-import io.vertx.core.buffer.Buffer;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.http.HttpMethod;
@@ -67,9 +66,10 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     LOGGER.info("About to start Verticle");
     LOGGER.info("Vertx uses LOGGER: {}, LoggerDelegate is {}", LOGGER, LOGGER.getDelegate());
     registerMBean();
-    initConfiguration();
+    printInitialConfiguration(initConfiguration());
     rootRouter = Router.router(vertx);
     allowCorsSupport(rootRouter);
+    registerManagementRestApi();
     registerEventBusHandler();
     startHttpServer(start);
   }
@@ -146,7 +146,7 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     LOGGER.debug("Vert.x config: {}", vertxConfig);
     httpServerHost = vertxConfig.getString(SERVICE_HTTP_LISTEN_ADDRESS.key, SERVICE_HTTP_LISTEN_ADDRESS.value);
     httpServerPort = Integer
-        .valueOf(vertxConfig.getString(SERVICE_HTTP_LISTEN_ADDRESS.key, SERVICE_HTTP_LISTEN_PORT.value));
+        .valueOf(vertxConfig.getString(SERVICE_HTTP_LISTEN_PORT.key, SERVICE_HTTP_LISTEN_PORT.value));
     serviceContextName = vertxConfig.getString(SERVICE_NAMESPACE.key, "");
     eventBusAddress = vertxConfig.getString(SERVICE_EVENTBUS_PREFIX.key, SERVICE_EVENTBUS_PREFIX.value);
     if (serviceContextName.equals("") == false) {
@@ -242,65 +242,160 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     // throw new UnsupportedOperationException("Method is not implemented yet");
     Router sub = Router.router(vertx);
     sub.route("/info").handler(this::infoHandler);
-    rootRouter.mountSubRouter("/" + getType(), sub);
+    Router mgmt = Router.router(vertx);
     rootRouter.route("/").handler(this::restApiOnRoot);
+    rootRouter.mountSubRouter("/" + getType() + "/", sub);
+    sub.mountSubRouter("/management/", mgmt);
+    mgmtHandler(mgmt);
+  }    
+
+  protected List<Class<?>> getImplementedInterfaces(Class<?> clazz) {
+    List<Class<?>> list = new ArrayList<Class<?>>();
+    Class<?>[] ifs = clazz.getInterfaces();
+    // LOGGER.debug("interfaces length: {}", ifs.length);
+    if (ifs != null) {
+      list.addAll(Arrays.asList(ifs));
+    }
+    // LOGGER.debug("interfaces list length: {}", list.size());
+    Class<?> zuper = clazz.getSuperclass();
+    if (zuper == null) {
+      // LOGGER.debug("zuper is null");
+      return list;
+    }
+    List<Class<?>> nested = getImplementedInterfaces(zuper);
+    // LOGGER.debug("nested list size: {}", nested.size());
+    if (nested.size() > 0) {
+      list.addAll(nested);
+    }
+    // LOGGER.debug("returned list size: {}", list.size());
+    return list;
   }
 
   protected List<Method> getManagementMethods() {
+    LOGGER.trace("About to get Management Methods");
     if (managementMethods != null) {
+      LOGGER.trace("Already existed methods list is: {}", managementMethods);
       return managementMethods;
     }
-    Class<?>[] all = this.getClass().getInterfaces();
+    List<Class<?>> classes = getImplementedInterfaces(getClass());
+    LOGGER.debug("Class {} implements {} interfaces", getClass().getName(), classes.size());
     List<Method> methods = new ArrayList<Method>();
     List<Class<?>> mbeans = new ArrayList<Class<?>>();
-    for (int i = 0; i < all.length; i++) {
-      final Class<?> clazz = all[i];
-      if (clazz.getSimpleName().endsWith("MBean")) {
+    for (Class<?> clazz : classes) {
+      LOGGER.trace("Analizing interface: " + clazz);
+      if (clazz.getName().endsWith("MBean")) {
+        LOGGER.trace("Found MBean interface with name: {}", clazz.getSimpleName());
         mbeans.add(clazz);
       }
     }
     for (Class<?> clazz : mbeans) {
       final Stream<Method> s = Arrays.asList(clazz.getDeclaredMethods()).stream();
-      s.filter(m -> Modifier.isPublic(m.getModifiers()));
-      s.filter(m -> {
+      final List<Method> list = s.filter(m -> {
         final String name = m.getName();
-        return name.startsWith("get") || name.endsWith("set") || name.startsWith("is");
-      });
-      methods.addAll(s.collect(Collectors.toList()));
+        return (name.startsWith("get") || name.startsWith("set") || name.startsWith("is"))
+            && Modifier.isPublic(m.getModifiers());
+      }).collect(Collectors.toList());
+      methods.addAll(list);
     }
+    // methods.sort((s1, s2) ->
+    // s1.getName().substring(1).compareTo(s2.getName().substring(1)));
     managementMethods = methods;
     return managementMethods;
   }
 
   protected void infoHandler(RoutingContext context) {
-    // .end("<body><head><title>Info</title></head><body>\nInfo\n</body></html>");
-    JsonObject root = new JsonObject();
-    root.put("description", "Available management method(s)");
+    LOGGER.info("Registering handler for: {}", context.normalisedPath());
+    JsonObject json = new JsonObject();
+    json.put("description", "Available management method(s)");
     JsonArray list = new JsonArray();
-    root.put("methods", list);
+    json.put("methods", list);
     for (Method m : getManagementMethods()) {
       list.add(m.getName());
     }
-    context.response().putHeader("rc-type", "text/json").setStatusCode(HttpResponseStatus.OK.code()).end(root.encodePrettily());
+    final String resp = json.encodePrettily();
+    LOGGER.debug("Send jsonResponse to client: ", resp);
+    context.response().putHeader("rc-type", "text/json").setStatusCode(HttpResponseStatus.OK.code()).end(resp);
   }
 
-  protected void restApiOnRoot(RoutingContext context) {
-    HttpServerResponse response = context.response();
-    response.putHeader("rc-type", "text/html").setStatusCode(HttpResponseStatus.OK.code());
-    Buffer b = Buffer.buffer();
-    b.appendString("<body><head><title>Endpoints</title></head><body><ul>\n");
+  protected void mgmtHandler(Router router) {
+    LOGGER.info("Registering handler for: {}", router.route().getPath());
+    for (Method m : getManagementMethods()) {
+      final String name = m.getName().toLowerCase();
+      boolean getter = true;
+      String path;
+      if (name.startsWith("get")) {
+        path = name.substring(3);
+      } else {
+        if (name.startsWith("set")) {
+          path = name.substring(3);
+          getter = false;
+        } else {
+          if (name.startsWith("is")) {
+            path = name.substring(2);
+          } else {
+            throw new UnsupportedOperationException("Cann't set handler for method: " + name);
+          }
+        }
+      }
+      if (getter) {
+        LOGGER.debug("Registering handler for context {}, method GET", path);
+        router.get("/" + path).handler(rc -> {
+          try {
+            final Object result = m.invoke(this);
+            JsonObject json = new JsonObject();
+            json.put("method", name);
+            json.put("result", result);
+            final String resp = json.encodePrettily();
+            LOGGER.trace("Send jsonResponse to client: {}", resp);
+            rc.response().setStatusCode(HttpResponseStatus.OK.code()).end(resp);
+            return;
+          } catch (Exception e) {
+            LOGGER.error("Error occured while invoke {} {}", e, Method.class.getName(), name);
+            rc.response().setStatusCode(HttpResponseStatus.INTERNAL_SERVER_ERROR.code()).end(e.getMessage());
+            return;
+          }
+        });
+      } else {
+        LOGGER.debug("Registering handler for context {}, method POST", path);
+        router.post("/" + path).handler(rc -> {
+          JsonObject body = rc.getBodyAsJson();
+          final Object value = body.getValue("value");
+          try {
+            m.invoke(this, value);
+            JsonObject json = new JsonObject();
+            json.put("method", name);
+            json.put("result", value);
+            final String resp = json.encodePrettily();
+            LOGGER.trace("Send jsonResponse to client: ", resp);
+            rc.response().setStatusCode(HttpResponseStatus.OK.code()).end(resp);
+            return;
+          } catch (Exception e) {
+            LOGGER.error("Error occured while invoke {} {}", e, Method.class.getName(), name);
+            rc.response().setStatusCode(HttpResponseStatus.INTERNAL_SERVER_ERROR.code()).end(e.getMessage());
+            return;
+          }
+        });
+      }
+    }
+  }
+
+  protected void restApiOnRoot(RoutingContext rc) {
+    LOGGER.info("Registering handler for: {}", rc.normalisedPath());
+    JsonObject resp = new JsonObject();
+    JsonArray path = new JsonArray();
+    resp.put("description", "Known API endpoints");
+    resp.put("paths", path);
     for (Route r : rootRouter.getRoutes()) {
-      String path = r.getPath();
-      if (path == null) {
+      // rc.
+      String p = r.getPath();
+      if (p == null) {
         continue;
       }
-      LOGGER.debug("Found path={} for route {}", path, r);
-      b.appendString("<li><a href='").appendString(path).appendString("'>").appendString(path)
-          .appendString("</a></li>\n");
+      LOGGER.debug("Found path={} for route {}", p, r);
+      path.add(p);
     }
-    b.appendString("</ul></body></html>\n");
-    response.putHeader("Content-Length", Integer.valueOf(b.length()).toString());
-    response.write(b).end();
+    final String response = resp.encodePrettily();
+    rc.response().putHeader("rc-type", "text/json").setStatusCode(HttpResponseStatus.OK.code()).end(response);
   }
 
   @Override

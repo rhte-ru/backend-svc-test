@@ -55,7 +55,9 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
         CompositeFuture.all(httpServerStart, cacheStart).setHandler(ar -> {
             if (ar.succeeded()) {
                 start.complete();
+                LOGGER.info("All services started");
             } else {
+                LOGGER.fatal(ar.cause());
                 start.fail(ar.cause());
             }
         });
@@ -64,7 +66,7 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
         // LOGGER.info("Vertx uses LOGGER: {}, LoggerDelegate is {}", LOGGER, LOGGER.getDelegate());
         // registerMBean();
         // initConfiguration();
-        createCacheManagerInFuture(start);
+        createCacheManagerInFuture(cacheStart);
     }
 
     protected void createCacheManagerInFuture(Future<Void> start) {
@@ -85,6 +87,7 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
                 // allowCorsSupport(rootRouter);
                 // registerEventBusHandler();
                 // startHttpServer(start);
+                start.complete();
             } else {
                 manager = null;
                 LOGGER.fatal("Error while creating remote cache manager", result.cause());

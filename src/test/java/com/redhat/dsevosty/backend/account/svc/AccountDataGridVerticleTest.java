@@ -361,7 +361,7 @@ public class AccountDataGridVerticleTest {
         }
     }
 
-    @Test
+    // @Test
     public void testRestApiOnRoot(Vertx vertx, VertxTestContext context) throws InterruptedException {
         WebClient web = WebClient.create(vertx);
         web.get(httpPort, SERVICE_HTTP_LISTEN_ADDRESS.value, "/").send(response -> {
@@ -373,7 +373,7 @@ public class AccountDataGridVerticleTest {
         context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
 
-    @Test
+    // @Test
     public void testInfoHandler(Vertx vertx, VertxTestContext context) throws InterruptedException {
         WebClient web = WebClient.create(vertx);
         web.get(httpPort, SERVICE_HTTP_LISTEN_ADDRESS.value, "/account/info").send(response -> {
@@ -384,5 +384,4 @@ public class AccountDataGridVerticleTest {
         web.close();
         context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
     }
-
 }
