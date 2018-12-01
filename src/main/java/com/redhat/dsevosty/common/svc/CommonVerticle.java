@@ -31,7 +31,6 @@ import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
-import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
@@ -247,7 +246,7 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     rootRouter.mountSubRouter("/" + getType() + "/", sub);
     sub.mountSubRouter("/management/", mgmt);
     mgmtHandler(mgmt);
-  }    
+  }
 
   protected List<Class<?>> getImplementedInterfaces(Class<?> clazz) {
     List<Class<?>> list = new ArrayList<Class<?>>();
@@ -284,16 +283,20 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     for (Class<?> clazz : classes) {
       LOGGER.trace("Analizing interface: " + clazz);
       if (clazz.getName().endsWith("MBean")) {
-        LOGGER.trace("Found MBean interface with name: {}", clazz.getSimpleName());
-        mbeans.add(clazz);
+        if (Modifier.isPublic(clazz.getModifiers())) {
+          LOGGER.trace("Found MBean interface with name: {}", clazz.getSimpleName());
+          mbeans.add(clazz);
+        }
       }
     }
     for (Class<?> clazz : mbeans) {
       final Stream<Method> s = Arrays.asList(clazz.getDeclaredMethods()).stream();
       final List<Method> list = s.filter(m -> {
-        final String name = m.getName();
-        return (name.startsWith("get") || name.startsWith("set") || name.startsWith("is"))
-            && Modifier.isPublic(m.getModifiers());
+        return Modifier.isPublic(m.getModifiers());
+        // final String name = m.getName();
+        // return (name.startsWith("get") || name.startsWith("set") ||
+        // name.startsWith("is"))
+        // && Modifier.isPublic(m.getModifiers());
       }).collect(Collectors.toList());
       methods.addAll(list);
     }
@@ -322,21 +325,32 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     for (Method m : getManagementMethods()) {
       final String name = m.getName().toLowerCase();
       boolean getter = true;
-      String path;
+      String path = name;
       if (name.startsWith("get")) {
         path = name.substring(3);
-      } else {
-        if (name.startsWith("set")) {
-          path = name.substring(3);
-          getter = false;
-        } else {
-          if (name.startsWith("is")) {
-            path = name.substring(2);
-          } else {
-            throw new UnsupportedOperationException("Cann't set handler for method: " + name);
-          }
-        }
       }
+      if (name.startsWith("is")) {
+        path = name.substring(3);
+      }
+      if (name.startsWith("set")) {
+        path = name.substring(3);
+        getter = false;
+      }
+      // if (name.startsWith("get")) {
+      // path = name.substring(3);
+      // } else {
+      // if (name.startsWith("set")) {
+      // path = name.substring(3);
+      // getter = false;
+      // } else {
+      // if (name.startsWith("is")) {
+      // path = name.substring(2);
+      // } else {
+      // throw new UnsupportedOperationException("Cann't set handler for method: " +
+      // name);
+      // }
+      // }
+      // }
       if (getter) {
         LOGGER.debug("Registering handler for context {}, method GET", path);
         router.get("/" + path).handler(rc -> {

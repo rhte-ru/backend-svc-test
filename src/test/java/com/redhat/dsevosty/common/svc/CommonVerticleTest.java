@@ -26,6 +26,7 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
+import io.vertx.junit5.Checkpoint;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 
@@ -172,6 +173,26 @@ public class CommonVerticleTest {
         web.get(httpPort, SERVICE_HTTP_LISTEN_ADDRESS.value, "/common/management/servicename").send(response -> {
             httpResponseHandler(response, context, body -> {
                 assertThat(body.toString()).contains("\"result\" : \"");
+            });
+        });
+        context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void handleEventBusRegistration(Vertx vertx, VertxTestContext context)  throws InterruptedException {
+        Checkpoint unregister = context.checkpoint();
+        Checkpoint register = context.checkpoint();
+        web.get(httpPort, SERVICE_HTTP_LISTEN_ADDRESS.value, "/common/management/unregistereventbushandler").send(response -> {
+            httpResponseHandler(response, context, body -> {
+                assertThat(body.toString()).contains("\"result\" : null");
+                unregister.flag();
+            });
+        });
+        // context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);
+        web.get(httpPort, SERVICE_HTTP_LISTEN_ADDRESS.value, "/common/management/registereventbushandler").send(response -> {
+            httpResponseHandler(response, context, body -> {
+                assertThat(body.toString()).contains("\"result\" : null");
+                register.flag();
             });
         });
         context.awaitCompletion(DEFAULT_DELAY, TimeUnit.SECONDS);

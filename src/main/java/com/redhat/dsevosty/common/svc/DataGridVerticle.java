@@ -30,23 +30,11 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DataGridVerticle.class);
 
-    // private static final String HTTP_GET_PARAMETER_ID = "id";
-
-    // protected String serviceContextName;
-
     private String hotrodServerHost;
     private int hotrodServerPort;
 
-    // private String httpServerHost;
-    // private int httpServerPort;
-
     private RemoteCacheManager manager;
     private RemoteCache<UUID, AbstractDataObject> cache;
-
-    // private EventBus eb;
-    // protected String eventBusAddress;
-
-    // protected Router rootRouter;
 
     @Override
     public void start(Future<Void> start) {
@@ -62,10 +50,6 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
             }
         });
         super.start(httpServerStart);
-        // LOGGER.info("About to start Verticle");
-        // LOGGER.info("Vertx uses LOGGER: {}, LoggerDelegate is {}", LOGGER, LOGGER.getDelegate());
-        // registerMBean();
-        // initConfiguration();
         createCacheManagerInFuture(cacheStart);
     }
 
@@ -82,11 +66,6 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
         }, result -> {
             if (result.succeeded()) {
                 manager = result.result();
-                // rootRouter = Router.router(vertx);
-                // registerManagementRestApi();
-                // allowCorsSupport(rootRouter);
-                // registerEventBusHandler();
-                // startHttpServer(start);
                 start.complete();
             } else {
                 manager = null;
@@ -106,126 +85,20 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
         if (manager != null) {
             LOGGER.info("About to stop RemoteCacheManager for", serviceContextName);
             manager.stopAsync().whenCompleteAsync((e, ex) -> {
+                LOGGER.info("RemoteCacheManager stopped");
                 stop.complete();
             });
+            manager = null;
         } else {
             stop.complete();
         }
     }
-
-    // protected void allowCorsSupport(Router router) {
-    // // CORS support
-    // Set<String> allowHeaders = new HashSet<String>();
-    // allowHeaders.add("x-requested-with");
-    // allowHeaders.add("Access-Control-Allow-Origin");
-    // allowHeaders.add("origin");
-    // allowHeaders.add("Content-Type");
-    // allowHeaders.add("accept");
-
-    // Set<HttpMethod> allowMethods = new HashSet<HttpMethod>();
-    // allowMethods.add(HttpMethod.GET);
-    // allowMethods.add(HttpMethod.POST);
-    // allowMethods.add(HttpMethod.DELETE);
-    // allowMethods.add(HttpMethod.PATCH);
-    // allowMethods.add(HttpMethod.PUT);
-
-    // router.route().handler(CorsHandler.create("*").allowedHeaders(allowHeaders).allowedMethods(allowMethods));
-    // router.route().handler(BodyHandler.create());
-    // }
-
-    // public void registerManagementRestApi() {
-    // // https://www.devcon5.ch/en/blog/2017/09/15/vertx-modular-router-design/
-    // // throw new UnsupportedOperationException("Method is not implemented yet");
-    // Router sub = Router.router(vertx);
-    // sub.route("/info").handler(this::infoHandler);
-    // rootRouter.mountSubRouter("/" + getType(), sub);
-    // rootRouter.route("/").handler(this::restApiOnRoot);
-    // }
-
-    // protected void infoHandler(RoutingContext context) {
-    // context.response().putHeader("rc-type",
-    // "text/html").setStatusCode(HttpResponseStatus.OK.code())
-    // .end("<body><head><title>Info</title></head><body>\nInfo\n</body></html>");
-    // }
-
-    // protected void restApiOnRoot(RoutingContext context) {
-    // HttpServerResponse response = context.response();
-    // response.putHeader("rc-type",
-    // "text/html").setStatusCode(HttpResponseStatus.OK.code());
-    // Buffer b = Buffer.buffer();
-    // b.appendString("<body><head><title>Endpoints</title></head><body><ul>\n");
-    // for (Route r : rootRouter.getRoutes()) {
-    // String path = r.getPath();
-    // if (path == null) {
-    // continue;
-    // }
-    // LOGGER.debug("Found path={} for route {}", path, r);
-    // b.appendString("<li><a
-    // href='").appendString(path).appendString("'>").appendString(path)
-    // .appendString("</a></li>\n");
-    // }
-    // b.appendString("</ul></body></html>\n");
-    // response.putHeader("Content-Length", Integer.valueOf(b.length()).toString());
-    // response.write(b).end();
-    // }
-
-    // protected EventBus getEventBus() {
-    // if (eb == null) {
-    // eb = vertx.eventBus();
-    // LOGGER.info("Got reference for eventbus={}", eb);
-    // }
-    // return eb;
-    // }
-
-    // public void unregisterEventBusHandler() {
-    // LOGGER.info("About to Unregister EventBusHadler for address{}",
-    // eventBusAddress);
-    // getEventBus().consumer(eventBusAddress).unregister(result -> {
-    // if (result.succeeded()) {
-    // LOGGER.info("EventBusHadler unregistered for address={}", eventBusAddress);
-    // } else {
-    // LOGGER.error("Error while Unregistering EventBusHadler address={}",
-    // result.cause(), eventBusAddress);
-    // }
-    // });
-    // }
-
-    // public void registerEventBusHandler() {
-    // LOGGER.info("About to register EventBusHadler for address {}",
-    // eventBusAddress);
-    // getEventBus().consumer(eventBusAddress,
-    // this::defaultEventBusHandler).completionHandler(result -> {
-    // if (result.succeeded()) {
-    // LOGGER.info("EventBusHadler registered for address={}", eventBusAddress);
-    // } else {
-    // LOGGER.error("Error while registering EventBusHadler address={}",
-    // result.cause(), eventBusAddress);
-    // }
-    // });
-    // }
-
-    // protected void startHttpServer(Future<Void> future) {
-    // LOGGER.info("Creating HTTP server for host={}, port={}", httpServerHost,
-    // httpServerPort);
-    // vertx.createHttpServer().requestHandler(rootRouter::accept).listen(httpServerPort,
-    // httpServerHost, result -> {
-    // if (result.succeeded()) {
-    // LOGGER.info("Vert.x HTTP Server started: " + result.result());
-    // future.complete();
-    // } else {
-    // LOGGER.warn("Error while starting Vert.x HTTP Server", result.cause());
-    // // future.fail(result.cause());
-    // future.complete();
-    // }
-    // });
-    // }
-
     protected void httpServerStartErrorHandler(Future<Void> future, AsyncResult<HttpServer> result) {
         if (result.succeeded()) {
             LOGGER.info("Vert.x HTTP Server started: " + result.result());
             future.complete();
         } else {
-            LOGGER.error("Error while starting Vert.x HTTP Server", result.cause());
+            LOGGER.warn("Error while starting Vert.x HTTP Server", result.cause());
             // future.fail(result.cause());
             future.complete();
         }
@@ -256,23 +129,9 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
         hotrodServerHost = vertxConfig.getString(SERVICE_JDG_REMOTE_ADDRESS.key, SERVICE_JDG_REMOTE_ADDRESS.value);
         hotrodServerPort = Integer
                 .valueOf(vertxConfig.getString(SERVICE_JDG_REMOTE_PORT.key, SERVICE_JDG_REMOTE_PORT.value));
-        // httpServerHost = vertxConfig.getString(SERVICE_HTTP_LISTEN_ADDRESS.key,
-        // SERVICE_HTTP_LISTEN_ADDRESS.value);
-        // httpServerPort = Integer
-        // .valueOf(vertxConfig.getString(SERVICE_HTTP_LISTEN_PORT.key,
-        // SERVICE_HTTP_LISTEN_PORT.value));
-        // serviceContextName = vertxConfig.getString(SERVICE_NAMESPACE.key, "");
-        // eventBusAddress = vertxConfig.getString(SERVICE_EVENTBUS_PREFIX.key,
-        // SERVICE_EVENTBUS_PREFIX.value);
-        // if (serviceContextName.equals("") == false) {
-        // eventBusAddress += "." + serviceContextName;
-        // }
         final String info = super.initConfiguration()
                 + "INFINISPAN_HOTROD_SERVER_HOST - {}\nINFINISPAN_HOTROD_SERVER_PORT - {}\n";
         return info;
-        // LOGGER.info(info, getClass().getName(), hotrodServerHost, hotrodServerPort,
-        // httpServerHost, httpServerPort,
-        // serviceContextName);
     }
 
     protected void printInitialConfiguration(String info) {
@@ -378,7 +237,6 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
                 return;
             }
             getAsyncUtil(id, message, HttpResponseStatus.CREATED, reply -> {
-                // reply.put("statusCode", HttpResponseStatus.INTERNAL_SERVER_ERROR.code());
                 replyError(message, "Could not get just put dataObject with id " + id);
             });
         });
@@ -445,7 +303,6 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
                 return;
             }
             getAsyncUtil(id, message, HttpResponseStatus.OK, reply -> {
-                // reply.put("statusCode", HttpResponseStatus.INTERNAL_SERVER_ERROR.code());
                 replyError(message, "Could not get just replaced dataObject with id " + id);
             });
         });
@@ -481,8 +338,6 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
 
     protected abstract AbstractDataObject dataObjectFromJson(JsonObject json);
 
-    // protected abstract void registerRestApi();
-
     // Management methods
 
     @Override
@@ -513,57 +368,21 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
   
     @Override
     public void setHotrodServerHost(String host) {
-  
+        hotrodServerHost = host;
     }
   
     @Override
-    public void getHotrodServerHost() {
-  
+    public String getHotrodServerHost() {
+        return hotrodServerHost;
     }
   
     @Override
     public void setHotrodServerPort(int port) {
-  
+        hotrodServerPort = port;
     }
   
     @Override
     public int getHotrodServerPort() {
-      return 0;
+      return hotrodServerPort;
     }
-  
-
-    // @Override
-    // public String getServiceName() {
-    //     return serviceContextName + "/" + getClass().getName();
-    // }
-
-    // // must be replaced with maven archetype generator with $package macro
-    // // return "${package}";
-    // protected abstract String getPackageName();
-
-    // // must be replaced with maven archetype generator with $package macro
-    // // return "type=${artefectId}";
-    // protected abstract String getType();
-
-    // protected void registerMBean() {
-    //     vertx.executeBlocking(future -> {
-    //         MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-    //         ObjectName name;
-    //         try {
-    //             name = new ObjectName(getPackageName() + ":type=" + getType());
-    //             mbs.registerMBean(this, name);
-    //             future.complete();
-    //         } catch (MalformedObjectNameException | InstanceAlreadyExistsException | MBeanRegistrationException
-    //                 | NotCompliantMBeanException e) {
-    //             future.fail(e);
-    //         }
-    //     }, result -> {
-    //         if (result.succeeded()) {
-    //             LOGGER.info("Registered JMX MBean '{}:Type={}'", getPackageName(), getType());
-    //         } else {
-    //             LOGGER.error("Error while creating JMX MBean '{}:Type={}'", result.cause(), getPackageName(),
-    //                     getType());
-    //         }
-    //     });
-    // }
 }
