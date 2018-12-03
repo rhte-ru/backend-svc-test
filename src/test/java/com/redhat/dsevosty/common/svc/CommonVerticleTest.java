@@ -199,16 +199,11 @@ public class CommonVerticleTest {
     }
 
     public static class MyCommonVerticle extends CommonVerticle {
-        public static final String PACKAGE_NAME = MyCommonVerticle.class.getPackage().getName();
+        // public static final String PACKAGE_NAME = MyCommonVerticle.class.getPackage().getName();
         public static final String ARTIFACT_ID = "common";
 
         @Override
         protected void defaultEventBusHandler(Message<JsonObject> message) {
-        }
-
-        @Override
-        protected String getPackageName() {
-            return PACKAGE_NAME;
         }
 
         @Override

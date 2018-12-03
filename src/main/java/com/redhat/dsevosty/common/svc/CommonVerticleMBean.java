@@ -10,8 +10,8 @@ public interface CommonVerticleMBean {
   public int getHttpServerPort();
   public void setHttpServerPort(int port);
 
-  public void registerManagementRestApi();
-  public void unregisterManagementRestApi();
+  // public void registerManagementRestApiHandler();
+  // public void unregisterManagementRestApi();
 
   public void registerEventBusHandler();
   public void unregisterEventBusHandler();

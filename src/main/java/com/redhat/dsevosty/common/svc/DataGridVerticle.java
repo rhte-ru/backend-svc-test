@@ -136,7 +136,7 @@ public abstract class DataGridVerticle extends CommonVerticle implements DataGri
 
     protected void printInitialConfiguration(String info) {
         LOGGER.info(info, getClass().getName(), getHttpServerHost(), getHttpServerPort(), serviceContextName,
-                eventBusAddress, hotrodServerHost, hotrodServerPort);
+                getEventBusAddress(), hotrodServerHost, hotrodServerPort);
     }
 
     protected Configuration getCacheManagerConfiguration() {

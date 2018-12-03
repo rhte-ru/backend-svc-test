@@ -54,21 +54,22 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
   private int httpServerPort;
 
   private EventBus eb;
-  protected String eventBusAddress;
+  private String eventBusAddress;
 
-  protected Router rootRouter;
+  private Router rootRouter;
+  private Router subRouter;
+  private Router mgmtRouter;
+  // protected Router apiRouter;
 
   private List<Method> managementMethods;
 
   @Override
   public void start(Future<Void> start) {
-    LOGGER.info("About to start Verticle");
+    LOGGER.info("About to start Verticle {}", getClass().getSimpleName());
     LOGGER.info("Vertx uses LOGGER: {}, LoggerDelegate is {}", LOGGER, LOGGER.getDelegate());
     registerMBean();
     printInitialConfiguration(initConfiguration());
-    rootRouter = Router.router(vertx);
-    allowCorsSupport(rootRouter);
-    registerManagementRestApi();
+    createRouterHierarchy();
     registerEventBusHandler();
     startHttpServer(start);
   }
@@ -79,8 +80,61 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     stopHttpServer(stop);
   }
 
-  protected void allowCorsSupport(Router router) {
-    // CORS support
+  // protected void allowCorsSupport() {
+  //   Router router = getRootRouter();
+  //   // CORS support
+  //   Set<String> allowHeaders = new HashSet<String>();
+  //   allowHeaders.add("x-requested-with");
+  //   allowHeaders.add("Access-Control-Allow-Origin");
+  //   allowHeaders.add("origin");
+  //   allowHeaders.add("Content-Type");
+  //   allowHeaders.add("accept");
+
+  //   Set<HttpMethod> allowMethods = new HashSet<HttpMethod>();
+  //   allowMethods.add(HttpMethod.GET);
+  //   allowMethods.add(HttpMethod.POST);
+  //   allowMethods.add(HttpMethod.DELETE);
+  //   allowMethods.add(HttpMethod.PATCH);
+  //   allowMethods.add(HttpMethod.PUT);
+
+  //   router.route().handler(CorsHandler.create("*").allowedHeaders(allowHeaders).allowedMethods(allowMethods));
+  //   router.route().handler(BodyHandler.create());
+  // }
+
+  protected synchronized Router getRootRouter() {
+    if (rootRouter == null) {
+      rootRouter = Router.router(vertx);
+    }
+    return rootRouter;
+  }
+
+  protected synchronized Router getSubRouter() {
+    if (subRouter == null) {
+      subRouter = Router.router(vertx);
+    }
+    return subRouter;
+  }
+
+  protected synchronized Router getMgmtRouter() {
+    if (mgmtRouter == null) {
+      mgmtRouter = Router.router(vertx);
+    }
+    return mgmtRouter;
+  }
+
+  // protected synchronized Router getApiRouter() {
+  //   // if (apiRouter == null) {
+  //   //   apiRouter = Router.router(vertx);
+  //   // }
+  //   // return apiRouter;
+  // }
+
+  protected Router createRouterHierarchy() {
+
+    Router root = getRootRouter();
+
+    // allowCorsSupport();
+
     Set<String> allowHeaders = new HashSet<String>();
     allowHeaders.add("x-requested-with");
     allowHeaders.add("Access-Control-Allow-Origin");
@@ -95,13 +149,29 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     allowMethods.add(HttpMethod.PATCH);
     allowMethods.add(HttpMethod.PUT);
 
-    router.route().handler(CorsHandler.create("*").allowedHeaders(allowHeaders).allowedMethods(allowMethods));
-    router.route().handler(BodyHandler.create());
+    root.route().handler(CorsHandler.create("*").allowedHeaders(allowHeaders).allowedMethods(allowMethods));
+    root.route().handler(BodyHandler.create());
+
+    Router sub = getSubRouter();
+    root.mountSubRouter("/" + getType() + "/", sub);
+
+    // https://www.devcon5.ch/en/blog/2017/09/15/vertx-modular-router-design/
+    // throw new UnsupportedOperationException("Method is not implemented yet");
+    Router mgmt = getMgmtRouter();
+
+    root.route("/").handler(this::restApiOnRoot);
+    sub.route("/info").handler(this::infoHandler);
+    sub.mountSubRouter("/management/", mgmt);
+    mgmtHandler(mgmt);
+
+    // registerManagementRestApiHandler();
+
+    return root;
   }
 
   protected Future<Void> startHttpServer(Future<Void> future) {
     LOGGER.info("Creating HTTP server for host={}, port={}", httpServerHost, httpServerPort);
-    vertx.createHttpServer().requestHandler(rootRouter::accept).listen(httpServerPort, httpServerHost, result -> {
+    vertx.createHttpServer().requestHandler(getRootRouter()::accept).listen(httpServerPort, httpServerHost, result -> {
       httpServerStartErrorHandler(future, result);
     });
     return future;
@@ -130,6 +200,10 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     } else {
       future.complete();
     }
+  }
+
+  protected String getEventBusAddress() {
+    return eventBusAddress;
   }
 
   protected EventBus getEventBus() {
@@ -235,18 +309,17 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     return httpServerPort;
   }
 
-  @Override
-  public void registerManagementRestApi() {
-    // https://www.devcon5.ch/en/blog/2017/09/15/vertx-modular-router-design/
-    // throw new UnsupportedOperationException("Method is not implemented yet");
-    Router sub = Router.router(vertx);
-    sub.route("/info").handler(this::infoHandler);
-    Router mgmt = Router.router(vertx);
-    rootRouter.route("/").handler(this::restApiOnRoot);
-    rootRouter.mountSubRouter("/" + getType() + "/", sub);
-    sub.mountSubRouter("/management/", mgmt);
-    mgmtHandler(mgmt);
-  }
+  // @Override
+  // public void registerManagementRestApiHandler() {
+  //   // https://www.devcon5.ch/en/blog/2017/09/15/vertx-modular-router-design/
+  //   // throw new UnsupportedOperationException("Method is not implemented yet");
+  //   Router mgmt = getMgmtRouter();
+
+  //   root.route("/").handler(this::restApiOnRoot);
+  //   sub.route("/info").handler(this::infoHandler);
+  //   sub.mountSubRouter("/management/", mgmt);
+  //   mgmtHandler(mgmt);
+  // }
 
   protected List<Class<?>> getImplementedInterfaces(Class<?> clazz) {
     List<Class<?>> list = new ArrayList<Class<?>>();
@@ -400,7 +473,6 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     resp.put("description", "Known API endpoints");
     resp.put("paths", path);
     for (Route r : rootRouter.getRoutes()) {
-      // rc.
       String p = r.getPath();
       if (p == null) {
         continue;
@@ -412,10 +484,10 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
     rc.response().putHeader("rc-type", "text/json").setStatusCode(HttpResponseStatus.OK.code()).end(response);
   }
 
-  @Override
-  public void unregisterManagementRestApi() {
-    throw new UnsupportedOperationException("Method not implemented");
-  }
+  // @Override
+  // public void unregisterManagementRestApi() {
+  //   throw new UnsupportedOperationException("Method not implemented");
+  // }
 
   @Override
   public void registerEventBusHandler() {
@@ -443,7 +515,10 @@ public abstract class CommonVerticle extends AbstractVerticle implements CommonV
 
   // must be replaced with maven archetype generator with $package macro
   // return "${package}";
-  protected abstract String getPackageName();
+  // protected abstract String getPackageName();
+  protected String getPackageName() {
+    return getClass().getPackage().getName();
+  }
 
   // must be replaced with maven archetype generator with $package macro
   // return "type=${artefectId}";
